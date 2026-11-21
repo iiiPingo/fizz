@@ -1,0 +1,31 @@
+<p align="center"><img src="docs/logo.png" width="96" alt="Fizz logo"></p>
+<h1 align="center">Fizz</h1>
+<p align="center">A minimal in-game performance overlay for Windows. FPS, temps, load, RAM and VRAM, without Afterburner/RivaTuner.</p>
+<p align="center"><a href="../../releases/latest"><b>Download the latest release</b></a></p>
+
+## Features
+- **Stats** you can switch on and reorder: FPS + 1% low, GPU/CPU temperature, GPU/CPU load, RAM, VRAM, present mode.
+- **Safe with anti-cheat**: the overlay is a transparent, click-through, always-on-top window. Nothing is injected into games.
+- Appears by itself when a game is in front (borderless/windowed), hides on the desktop.
+- Hotkeys: **Ctrl+Alt+F** show/hide, **Ctrl+Alt+L** horizontal/vertical, **Ctrl+Alt+P** next preset.
+- Per-game presets, or hide it completely in competitive games.
+- Session summary when a game closes (avg FPS, 1% low, max temps) and optional CSV logs.
+- Sensor picker if a default temperature sensor looks wrong. A watchdog restarts it if it ever crashes.
+
+## Install
+1. Install the **PawnIO** driver from [pawnio.eu](https://pawnio.eu) (lets Fizz read CPU temperature; replaces the old WinRing0 driver).
+2. Download `Fizz-1.0.zip` from [Releases](../../releases/latest), unzip it into its own folder and run `Fizz.exe` (click Yes on the UAC prompt).
+   Fizz creates a logon task, so after that it starts with Windows without prompts.
+
+Exclusive fullscreen can't be drawn over by anything that isn't injected, so run games in borderless mode. Note: some anti-cheats (e.g. FACEIT) may block the PawnIO driver.
+
+## Build
+`build.sh` builds `out/Fizz.exe` with Mono's `mcs` against the .NET Framework 4.8 reference assemblies and the LibreHardwareMonitor DLLs in `lib/lhm096`. Unit tests are in `tests/`.
+
+## Third-party
+- [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) 0.9.6 (MPL-2.0), DLLs in `lib/lhm096`
+- [PresentMon](https://github.com/GameTechDev/PresentMon) 2.6.0 (MIT), bundled in the release under `tools/`
+- [PawnIO](https://pawnio.eu) (GPL-2.0 driver, installed separately)
+
+## License
+MIT for Fizz's own code. Third-party components keep their own licenses.
