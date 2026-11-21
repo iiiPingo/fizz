@@ -130,7 +130,7 @@ namespace Fizz
             }
             Beat();
 
-            tray.Icon = Theme.LoadIcon(SystemInformation.SmallIconSize.Width);
+            tray.Icon = Theme.LoadTrayIcon(SystemInformation.SmallIconSize.Width);
             tray.Text = "Fizz";
             menu.Renderer = new DarkMenuRenderer();
             menu.ShowImageMargin = true;
@@ -142,6 +142,13 @@ namespace Fizz
 
             hub.Hotkey += OnHotkey;
             hub.OpenSettingsRequested += OpenSettings;
+            hub.ExitRequested += () =>
+            {
+                // after this message is handled, not inside it
+                var t = new System.Windows.Forms.Timer { Interval = 10 };
+                t.Tick += (o, e) => { t.Stop(); t.Dispose(); ExitApp(0); };
+                t.Start();
+            };
             RegisterHotkeys();
 
             SystemEvents.PowerModeChanged += OnPowerModeChanged;

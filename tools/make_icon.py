@@ -48,7 +48,41 @@ def icon(size):
             d.ellipse([(bx - r) * k, (by - r) * k, (bx + r) * k, (by + r) * k], fill=(255, 255, 255, 230))
     return im.resize((size, size), Image.LANCZOS)
 
+def tray(size):
+    """tray icon: just the can (no pink tile), white with the pulse in Fizz pink, filling the square"""
+    S = 8; W = size * S
+    im = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    k = W / 100.0
+    cx, cw = 50 * k, 70 * k
+    top, bot = 12 * k, 96 * k
+    neck = 8 * k
+    white = (255, 255, 255, 255)
+    pink = (255, 92, 158, 255)
+    d.polygon([(cx - cw / 2, top + neck), (cx - cw * 0.38, top), (cx + cw * 0.38, top), (cx + cw / 2, top + neck)], fill=white)
+    d.rounded_rectangle([cx - cw / 2, top + neck - 1, cx + cw / 2, bot], radius=int(8 * k), fill=white)
+    d.rounded_rectangle([cx - cw * 0.18, top - 9 * k, cx + cw * 0.18, top + 1 * k], radius=int(3 * k), fill=white)  # pull tab
+    mid = (top + bot) / 2 + 3 * k
+    x0, x1 = cx - cw / 2, cx + cw / 2
+    pts = [(x0, mid), (x0 + cw * .20, mid), (x0 + cw * .36, mid - 18 * k), (x0 + cw * .54, mid + 20 * k), (x0 + cw * .70, mid - 8 * k), (x0 + cw * .80, mid), (x1, mid)]
+    lw = int(11 * k)
+    d.line(pts, fill=pink, width=lw, joint="curve")
+    for p in pts[1:-1]:
+        d.ellipse([p[0] - lw / 2, p[1] - lw / 2, p[0] + lw / 2, p[1] + lw / 2], fill=pink)
+    # thin dark edge under the can so it still reads on a light taskbar
+    from PIL import ImageFilter
+    a = im.split()[3].filter(ImageFilter.MaxFilter(int(W * 0.07) | 1))
+    edge = Image.new("RGBA", (W, W), (24, 24, 24, 200))
+    out = Image.new("RGBA", (W, W), (0, 0, 0, 0))
+    out.paste(edge, (0, 0), a)
+    out.alpha_composite(im)
+    return out.resize((size, size), Image.LANCZOS)
+
 sizes = [16, 20, 24, 32, 40, 48, 64, 128, 256]
+if len(sys.argv) > 3:   # make_icon.py app.ico sheet.png tray.ico
+    tsz = [16, 20, 24, 32, 40, 48, 64]
+    timgs = [tray(s) for s in tsz]
+    timgs[-1].save(sys.argv[3], format="ICO", sizes=[(s, s) for s in tsz], append_images=timgs[:-1])
 imgs = [icon(s) for s in sizes]
 imgs[-1].save(sys.argv[1], format="ICO", sizes=[(s, s) for s in sizes], append_images=imgs[:-1])
 sheet = Image.new("RGBA", (sum(sizes) + 10 * len(sizes) + 10, 276), (32, 32, 32, 255))

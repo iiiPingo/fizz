@@ -23,6 +23,17 @@ namespace Fizz
 
         public static string Hex(Color c) { return "#" + c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"); }
 
+        // tray: just the can (no pink tile), so it sits at the same size as other tray icons
+        public static Icon LoadTrayIcon(int size)
+        {
+            try
+            {
+                using (var s = typeof(Theme).Assembly.GetManifestResourceStream("Fizz.fizz-tray.ico"))
+                    return s == null ? LoadIcon(size) : new Icon(s, size, size);
+            }
+            catch { return LoadIcon(size); }
+        }
+
         public static Icon LoadIcon(int size)
         {
             try
@@ -88,13 +99,16 @@ namespace Fizz
     {
         public event Action<int> Hotkey;
         public event Action OpenSettingsRequested;
+        public event Action ExitRequested;
         readonly int openMsg = Native.RegisterWindowMessage(Program.OpenSettingsMessage);
+        readonly int exitMsg = Native.RegisterWindowMessage(Program.ExitMessage);
 
         public HubWindow()
         {
             CreateHandle(new CreateParams { Caption = Program.HubTitle, Parent = Native.HWND_MESSAGE });
             // let the non-elevated launcher talk to us when we run elevated
             try { Native.ChangeWindowMessageFilterEx(Handle, openMsg, Native.MSGFLT_ALLOW, IntPtr.Zero); } catch { }
+            try { Native.ChangeWindowMessageFilterEx(Handle, exitMsg, Native.MSGFLT_ALLOW, IntPtr.Zero); } catch { }
         }
 
         /// <summary>Registers "Ctrl+Alt+F" style hotkeys. Returns null on success, else a reason.</summary>
@@ -135,6 +149,7 @@ namespace Fizz
             {
                 if (m.Msg == Native.WM_HOTKEY) { var h = Hotkey; if (h != null) h(m.WParam.ToInt32()); return; }
                 if (m.Msg == openMsg) { var o = OpenSettingsRequested; if (o != null) o(); return; }
+                if (m.Msg == exitMsg) { var x = ExitRequested; if (x != null) x(); return; }
             }
             catch (Exception ex) { Log.Error("Hub.WndProc", ex); }
             base.WndProc(ref m);

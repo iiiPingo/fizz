@@ -10,8 +10,8 @@ using System.Threading;
 [assembly: System.Reflection.AssemblyTitle("Fizz")]
 [assembly: System.Reflection.AssemblyProduct("Fizz")]
 [assembly: System.Reflection.AssemblyDescription("Fizz - in-game performance overlay")]
-[assembly: System.Reflection.AssemblyVersion("1.0.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.0.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.1.1.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.1.1.0")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace Fizz
@@ -20,6 +20,7 @@ namespace Fizz
     {
         public const string HubTitle = "Fizz.Hub";
         public const string OpenSettingsMessage = "Fizz.OpenSettings";
+        public const string ExitMessage = "Fizz.Exit";   // "Fizz.exe --exit": close cleanly (Minibar's Stop / updates)
         public const int ExitRestart = 3;
 
         [STAThread]
@@ -71,6 +72,13 @@ namespace Fizz
     {
         public static int Run(string[] args)
         {
+            if (args.Contains("--exit"))
+            {
+                // ask a running Fizz to close (the hub accepts this from a non-admin process); the watchdog then stops too
+                IntPtr h = Program.FindHub();
+                if (h != IntPtr.Zero) Native.PostMessage(h, Native.RegisterWindowMessage(Program.ExitMessage), IntPtr.Zero, IntPtr.Zero);
+                return 0;
+            }
             bool fromTask = args.Contains("--task");
             bool replace = args.Contains("--replace");
 
