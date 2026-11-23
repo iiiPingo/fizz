@@ -108,3 +108,86 @@ namespace Fizz
         }
     }
 }
+
+namespace Fizz
+{
+    internal sealed class OpenApp
+    {
+        public string Exe = "", Title = "";
+        public override string ToString() { return Title + " (" + Exe + ")"; }
+    }
+
+    /// <summary>The apps that have a window open right now, for the "Add open app" pickers on the Games page.</summary>
+    internal static class OpenApps
+    {
+        // background/system processes with windows nobody would pick
+        static readonly HashSet<string> Skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "explorer.exe", "ApplicationFrameHost.exe", "TextInputHost.exe", "SearchHost.exe", "StartMenuExperienceHost.exe",
+            "ShellExperienceHost.exe", "LockApp.exe", "SystemSettingsBroker.exe", "Fizz.exe"
+        };
+
+        delegate bool EnumProc(IntPtr hwnd, IntPtr l);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern bool EnumWindows(EnumProc cb, IntPtr l);
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)] static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+        [System.Runtime.InteropServices.DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr h, uint cmd);
+        [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] static extern IntPtr GetWindowLongPtr(IntPtr h, int index);
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int value, int size);
+
+        /// <summary>Visible top-level app windows, one entry per exe, sorted by title.</summary>
+        public static List<OpenApp> List()
+        {
+            var raw = new List<OpenApp>();
+            int ownPid = System.Diagnostics.Process.GetCurrentProcess().Id;
+            var sb = new StringBuilder(256);
+            var names = new Dictionary<int, string>();
+            try
+            {
+                EnumWindows((h, l) =>
+                {
+                    try
+                    {
+                        if (!Native.IsWindowVisible(h) || GetWindow(h, 4 /* GW_OWNER */) != IntPtr.Zero) return true;
+                        if ((GetWindowLongPtr(h, -20 /* GWL_EXSTYLE */).ToInt64() & Native.WS_EX_TOOLWINDOW) != 0) return true;
+                        int cloaked;
+                        if (DwmGetWindowAttribute(h, 14 /* DWMWA_CLOAKED */, out cloaked, 4) == 0 && cloaked != 0) return true; // hidden store-app shells
+                        sb.Length = 0;
+                        GetWindowText(h, sb, sb.Capacity);
+                        if (sb.Length == 0) return true;
+                        int pid;
+                        Native.GetWindowThreadProcessId(h, out pid);
+                        if (pid == ownPid || pid <= 4) return true;
+                        string exe;
+                        if (!names.TryGetValue(pid, out exe))
+                        {
+                            string path = Native.ProcessImagePath(pid);
+                            names[pid] = exe = path == null ? "" : System.IO.Path.GetFileName(path);
+                        }
+                        raw.Add(new OpenApp { Exe = exe, Title = sb.ToString() });
+                    }
+                    catch { }
+                    return true;
+                }, IntPtr.Zero);
+            }
+            catch (Exception ex) { Log.Error("OpenApps", ex); }
+            return Clean(raw);
+        }
+
+        /// <summary>One entry per exe (first window's title), no system shells, sorted by title.</summary>
+        public static List<OpenApp> Clean(IEnumerable<OpenApp> raw)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var list = new List<OpenApp>();
+            foreach (var a in raw)
+            {
+                if (a == null || string.IsNullOrWhiteSpace(a.Exe) || Skip.Contains(a.Exe) || !seen.Add(a.Exe)) continue;
+                string t = (a.Title ?? "").Trim();
+                if (t.Length == 0) t = a.Exe;
+                if (t.Length > 48) t = t.Substring(0, 47) + "…";
+                list.Add(new OpenApp { Exe = a.Exe, Title = t });
+            }
+            list.Sort((x, y) => StringComparer.OrdinalIgnoreCase.Compare(x.Title, y.Title));
+            return list;
+        }
+    }
+}

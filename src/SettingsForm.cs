@@ -171,10 +171,11 @@ namespace Fizz
         DarkNum marginBox;
         // games page
         DarkList gameList;
-        TextBox gameInput, notGamesBox;
+        TextBox gameInput, notGameInput;
+        DarkList notGameList;
         DarkCombo gamePresetBox;
         CheckBox gameHide;
-        Button addCurrent, notGameBtn;
+        Button removeGameBtn;
         // advanced
         TextBox hkToggle, hkLayout, hkPreset;
         Label hkProblem;
@@ -606,8 +607,8 @@ namespace Fizz
             marginBox = Num(p, x2 + S96(208), y, 0, 200, 2, 0, (s, e) => { S.Margin = (int)marginBox.Value; Changed(); });
             y += S96(36);
             Lbl(p, "Update rate", x, y + 4);
-            rateBox = Combo(p, x2, y, S96(140), (s, e) => { S.SampleMs = new[] { 250, 500, 1000 }[rateBox.SelectedIndex]; Changed(); });
-            rateBox.Items.AddRange(new object[] { "4x per second", "2x per second", "1x per second" });
+            rateBox = Combo(p, x2, y, S96(140), (s, e) => { S.SampleMs = new[] { 250, 333, 500, 1000 }[rateBox.SelectedIndex]; Changed(); });
+            rateBox.Items.AddRange(new object[] { "4x per second", "3x per second", "2x per second", "1x per second" });
             y += S96(36);
             Lbl(p, "Screen", x, y + 4);
             screenBox = Combo(p, x2, y, S96(260), (s, e) => { S.Screen = screenBox.SelectedIndex == 1 ? "Main" : "Active"; Changed(); });
@@ -623,8 +624,8 @@ namespace Fizz
         void BuildGamesPage()
         {
             var p = Page("Games");
-            Lbl(p, "Rules per game (by exe name). Hidden games never draw the overlay: zero added latency.", S96(24), S96(52), Theme.Dim);
-            gameList = MakeList(p, new Rectangle(S96(24), S96(78), S96(330), S96(220)));
+            Lbl(p, "Hide the overlay in a game, give it its own preset, or get a summary when it closes.", S96(24), S96(52), Theme.Dim);
+            gameList = MakeList(p, new Rectangle(S96(24), S96(78), S96(330), S96(196)));
             gameList.TextOf = o => ((GameRule)o).Exe;
             gameList.SubTextOf = o =>
             {
@@ -636,6 +637,7 @@ namespace Fizz
                 return string.Join(" · ", tags);
             };
             gameList.SelectedIndexChanged += (s, e) => LoadGameDetails();
+            gameList.KeyDown += (s, e) => { if (e.KeyCode == Keys.Delete) RemoveGame(); };
 
             int x = S96(372);
             gameHide = Chk(p, "Hide overlay in this game", x, S96(80), (s, e) => { var g = gameList.SelectedItem as GameRule; if (g != null) { g.Hide = gameHide.Checked; Changed(); gameList.Invalidate(); } });
@@ -648,61 +650,109 @@ namespace Fizz
                 g.Preset = gamePresetBox.SelectedIndex <= 0 ? "" : (string)gamePresetBox.SelectedItem;
                 Changed(); gameList.Invalidate();
             });
-            var remove = Btn("Remove rule", x, S96(214), S96(110));
-            remove.Click += (s, e) => { var g = gameList.SelectedItem as GameRule; if (g != null) { S.Games.Remove(g); Changed(); LoadGames(); } };
-            p.Controls.Add(remove);
+            removeGameBtn = Btn("Remove", x, S96(214), S96(96));
+            removeGameBtn.Click += (s, e) => RemoveGame();
+            p.Controls.Add(removeGameBtn);
 
-            gameInput = Txt(p, S96(24), S96(308), S96(180));
-            var add = Btn("Add exe", S96(212), S96(307), S96(84));
+            // add a game: pick it from the open apps, or type its exe
+            var pickGame = Btn("Add open app…", S96(24), S96(283), S96(150));
+            pickGame.Click += (s, e) => ShowOpenApps(pickGame, AddGame);
+            p.Controls.Add(pickGame);
+            Lbl(p, "or exe", S96(184), S96(289), Theme.Dim);
+            gameInput = Txt(p, S96(232), S96(285), S96(122));
+            gameInput.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { AddGame(gameInput.Text); e.SuppressKeyPress = true; } };
+            var add = Btn("Add", S96(362), S96(283), S96(64));
             add.Click += (s, e) => AddGame(gameInput.Text);
             p.Controls.Add(add);
-            addCurrent = Btn("Add last game", S96(304), S96(307), S96(196));
-            addCurrent.Click += (s, e) => AddGame(app.LastGameExe);
-            p.Controls.Add(addCurrent);
-            notGameBtn = Btn("Not a game", S96(508), S96(307), S96(104));
-            notGameBtn.Click += (s, e) => { app.MarkNotGame(app.LastGameExe); LoadGames(); };
-            p.Controls.Add(notGameBtn);
 
-            Lbl(p, "Never treat these as games (one exe per line). Browsers and video players are here by default:", S96(24), S96(350), Theme.Dim);
-            var ngHost = new RoundHost { Bounds = new Rectangle(S96(24), S96(374), S96(588), S96(120)), BackColor = Theme.Card };
-            notGamesBox = new TextBox
-            {
-                Multiline = true, ScrollBars = ScrollBars.Vertical, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, Font = Font,
-                Bounds = new Rectangle(S96(10), S96(8), S96(570), S96(104))
-            };
-            notGamesBox.HandleCreated += (s, e) => Ui.DarkScrollbars(notGamesBox);
-            var ngTimer = new Timer { Interval = 600 };
-            ngTimer.Tick += (s, e) => { ngTimer.Stop(); SaveNotGames(); };
-            notGamesBox.TextChanged += (s, e) => { if (!loading) { ngTimer.Stop(); ngTimer.Start(); } };
-            notGamesBox.Leave += (s, e) => SaveNotGames();
-            FormClosing += (s, e) => { ngTimer.Stop(); SaveNotGames(); };
-            ngHost.Controls.Add(notGamesBox);
-            p.Controls.Add(ngHost);
+            Lbl(p, "Never treat these as games (browsers, launchers and chat apps are here already):", S96(24), S96(334), Theme.Dim);
+            notGameList = MakeList(p, new Rectangle(S96(24), S96(358), S96(330), S96(142)));
+            notGameList.KeyDown += (s, e) => { if (e.KeyCode == Keys.Delete) RemoveNotGame(); };
+            var pickNot = Btn("Add open app…", x, S96(358), S96(150));
+            pickNot.Click += (s, e) => ShowOpenApps(pickNot, AddNotGame);
+            p.Controls.Add(pickNot);
+            notGameInput = Txt(p, x, S96(402), S96(150));
+            notGameInput.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) { AddNotGame(notGameInput.Text); e.SuppressKeyPress = true; } };
+            var addNot = Btn("Add", x + S96(158), S96(400), S96(64));
+            addNot.Click += (s, e) => AddNotGame(notGameInput.Text);
+            p.Controls.Add(addNot);
+            var removeNot = Btn("Remove", x, S96(444), S96(96));
+            removeNot.Click += (s, e) => RemoveNotGame();
+            p.Controls.Add(removeNot);
         }
 
-        void SaveNotGames()
+        /// <summary>"eldenring" / "C:\Games\eldenring.exe" / "\"eldenring.exe\"" → "eldenring.exe".</summary>
+        public static string CleanExe(string exe)
         {
-            if (notGamesBox == null) return;
-            var list = notGamesBox.Lines.Select(l => l.Trim().Trim('"')).Where(l => l.Length > 0)
-                .Select(l => l.Contains("\\") ? System.IO.Path.GetFileName(l) : l)
-                .Select(l => l.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? l : l + ".exe")
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-            if (list.SequenceEqual(S.NotGames, StringComparer.OrdinalIgnoreCase)) return;
-            S.NotGames = list;
-            Changed();
+            exe = (exe ?? "").Trim().Trim('"').Trim();
+            if (exe.Length == 0) return "";
+            int slash = exe.LastIndexOfAny(new[] { '\\', '/' });
+            if (slash >= 0) exe = exe.Substring(slash + 1).Trim();
+            if (exe.Length == 0) return "";
+            if (!exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) exe += ".exe";
+            return exe;
+        }
+
+        /// <summary>Dark menu of the apps open right now (last game first); picking one calls <paramref name="pick"/> with its exe.</summary>
+        void ShowOpenApps(Control under, Action<string> pick)
+        {
+            var m = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), ShowImageMargin = false, Font = Font, Padding = new Padding(0, 4, 0, 4) };
+            Func<string, string, ToolStripMenuItem> item = (text, exe) =>
+            {
+                var it = new ToolStripMenuItem(text) { ForeColor = Theme.Text, ShortcutKeyDisplayString = exe, Padding = new Padding(0, 4, 0, 4) };
+                it.Click += (s, e) => pick(exe);
+                return it;
+            };
+            string last = app.LastGameExe;
+            if (!string.IsNullOrEmpty(last)) { m.Items.Add(item("Last game", last)); m.Items.Add(new ToolStripSeparator()); }
+            var apps = OpenApps.List();
+            foreach (var a in apps) if (!string.Equals(a.Exe, last, StringComparison.OrdinalIgnoreCase)) m.Items.Add(item(a.Title, a.Exe));
+            if (apps.Count == 0 && string.IsNullOrEmpty(last)) m.Items.Add(new ToolStripMenuItem("No open apps found") { Enabled = false });
+            m.Closed += (s, e) => BeginInvoke(new Action(m.Dispose));
+            m.Show(under, new Point(0, under.Height + 2));
         }
 
         void AddGame(string exe)
         {
-            exe = (exe ?? "").Trim().Trim('"');
+            exe = CleanExe(exe);
             if (exe.Length == 0) return;
-            if (exe.Contains("\\")) exe = System.IO.Path.GetFileName(exe);
-            if (!exe.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) exe += ".exe";
             var g = S.GetOrAddGame(exe);
             Changed();
             LoadGames();
             gameList.SelectedItem = g;
             gameInput.Text = "";
+        }
+
+        void RemoveGame()
+        {
+            var g = gameList.SelectedItem as GameRule;
+            if (g == null) return;
+            int i = gameList.SelectedIndex;
+            S.Games.Remove(g);
+            Changed();
+            LoadGames();
+            if (gameList.Items.Count > 0) gameList.SelectedIndex = Math.Min(i, gameList.Items.Count - 1);
+        }
+
+        void AddNotGame(string exe)
+        {
+            exe = CleanExe(exe);
+            if (exe.Length == 0) return;
+            if (!S.IsNotGame(exe)) app.MarkNotGame(exe); // also ends its session if Fizz thought it was a game
+            LoadGames();
+            notGameList.SelectedItem = S.NotGames.FirstOrDefault(n => string.Equals(n, exe, StringComparison.OrdinalIgnoreCase));
+            notGameInput.Text = "";
+        }
+
+        void RemoveNotGame()
+        {
+            var exe = notGameList.SelectedItem as string;
+            if (exe == null) return;
+            int i = notGameList.SelectedIndex;
+            S.NotGames.RemoveAll(n => string.Equals(n, exe, StringComparison.OrdinalIgnoreCase));
+            Changed();
+            LoadGames();
+            if (notGameList.Items.Count > 0) notGameList.SelectedIndex = Math.Min(i, notGameList.Items.Count - 1);
         }
 
         void LoadGames()
@@ -719,11 +769,11 @@ namespace Fizz
                 foreach (var g in S.Games) gameList.Items.Add(g);
                 if (sel != null && gameList.Items.Contains(sel)) gameList.SelectedItem = sel;
                 else if (gameList.Items.Count > 0) gameList.SelectedIndex = 0;
-                notGamesBox.Text = string.Join(Environment.NewLine, S.NotGames);
-                string last = app.LastGameExe;
-                addCurrent.Text = string.IsNullOrEmpty(last) ? "Add last game" : "Add " + last;
-                addCurrent.Enabled = !string.IsNullOrEmpty(last);
-                notGameBtn.Enabled = !string.IsNullOrEmpty(last);
+
+                var nsel = notGameList.SelectedItem;
+                notGameList.Items.Clear();
+                foreach (var n in S.NotGames.OrderBy(n => n, StringComparer.OrdinalIgnoreCase)) notGameList.Items.Add(n);
+                if (nsel != null && notGameList.Items.Contains(nsel)) notGameList.SelectedItem = nsel;
             }
             finally { loading = false; }
             LoadGameDetails();
@@ -736,7 +786,7 @@ namespace Fizz
             loading = true;
             try
             {
-                gameHide.Enabled = gamePresetBox.Enabled = gameSummary.Enabled = g != null;
+                gameHide.Enabled = gamePresetBox.Enabled = gameSummary.Enabled = removeGameBtn.Enabled = g != null;
                 if (g == null || gamePresetBox.Items.Count == 0) return;
                 gameHide.Checked = g.Hide;
                 gameSummary.Checked = g.Summary;
@@ -823,7 +873,7 @@ namespace Fizz
                 modeBox.SelectedIndex = S.AlwaysShow ? 1 : 0;
                 cornerBox.SelectedIndex = Math.Max(0, Array.IndexOf(new[] { "TopLeft", "TopRight", "BottomLeft", "BottomRight" }, S.Corner));
                 marginBox.Value = Clamp(S.Margin, marginBox);
-                rateBox.SelectedIndex = S.SampleMs <= 250 ? 0 : S.SampleMs <= 500 ? 1 : 2;
+                rateBox.SelectedIndex = S.SampleMs <= 250 ? 0 : S.SampleMs <= 333 ? 1 : S.SampleMs <= 500 ? 2 : 3;
                 screenBox.SelectedIndex = S.MainScreenOnly ? 1 : 0;
                 windowedBox.SelectedIndex = S.PinInWindow ? 0 : 1;
                 hkToggle.Text = S.HotkeyToggle; hkLayout.Text = S.HotkeyLayout; hkPreset.Text = S.HotkeyPreset;

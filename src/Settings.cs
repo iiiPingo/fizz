@@ -242,7 +242,7 @@ namespace Fizz
             if (Screen != "Main") Screen = "Active";
             if (Corner != "TopRight" && Corner != "BottomLeft" && Corner != "BottomRight") Corner = "TopLeft";
             Margin = Math.Max(0, Math.Min(200, Margin));
-            SampleMs = SampleMs <= 300 ? 250 : SampleMs <= 750 ? 500 : 1000;
+            SampleMs = SampleMs <= 290 ? 250 : SampleMs <= 415 ? 333 : SampleMs <= 750 ? 500 : 1000; // 4x, 3x, 2x, 1x per second
             if (string.IsNullOrWhiteSpace(HotkeyToggle)) HotkeyToggle = "Ctrl+Alt+F";
             if (string.IsNullOrWhiteSpace(HotkeyLayout)) HotkeyLayout = "Ctrl+Alt+L";
             if (string.IsNullOrWhiteSpace(HotkeyPreset)) HotkeyPreset = "Ctrl+Alt+P";

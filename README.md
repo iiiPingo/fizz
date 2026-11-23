@@ -22,6 +22,8 @@ Exclusive fullscreen can't be drawn over by anything that isn't injected, so run
 ## What's new
 **1.2.0**
 - Fixed: after you switched away from a windowed game, the overlay could jump back and forth between the game and the screen corner (most noticeable with "Always" on).
+- Games page is easier: **Add open app…** lists the apps you have open, so you pick a game (or an app that isn't a game) instead of typing its exe. The "never a game" list is now a normal list with Add and Remove.
+- Update rate has a new **3x per second** option.
 - New presets start vertical. Ctrl+Alt+L still switches.
 - New on the Look page (and the tray's Position menu): **Screen** keeps the overlay on your main screen when you're not in a game, and **Windowed games** keeps it in the screen corner instead of inside the game window. Either one stops it moving around.
 - New look for the settings window and tray menu to match the other Pingo apps: Segoe UI Variable font, icons in the side menu, Windows 11 rounded menus with ticks instead of square check boxes. The overlay itself looks the same as before.

@@ -129,7 +129,9 @@ namespace Fizz
 
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
-            e.TextColor = e.Item.Enabled ? Theme.Text : Theme.Dim;
+            // the exe name shown on the right of the open-apps picker is dimmer than the title
+            bool side = e.Item is ToolStripMenuItem && e.Text == ((ToolStripMenuItem)e.Item).ShortcutKeyDisplayString && e.Text != e.Item.Text;
+            e.TextColor = !e.Item.Enabled ? Theme.Dim : side ? Theme.Sub : Theme.Text;
             base.OnRenderItemText(e);
         }
 

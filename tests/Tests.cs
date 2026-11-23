@@ -38,6 +38,7 @@ namespace Fizz.Tests
             SettingsTests();
             Hotkeys();
             OverlayStaysPut();
+            GameExceptions();
             Perf();
             Console.WriteLine("\n" + pass + " passed, " + fail + " failed (" + sw.ElapsedMilliseconds + " ms)");
             return fail == 0 ? 0 : 1;
@@ -328,6 +329,32 @@ namespace Fizz.Tests
             Ok(!FizzApp.StaysOnGame(front, false, false, onGame), "app over the overlay's spot: overlay leaves the game");
             Ok(FizzApp.StaysOnGame(front, true, false, onGame), "desktop in front: overlay stays on the game");
             Ok(!FizzApp.StaysOnGame(R(1920, 0, 3840, 1080), false, false, new Native.RECT()), "no game area: don't claim the overlay is on the game");
+        }
+
+        static void GameExceptions()
+        {
+            Ok(SettingsForm.CleanExe("eldenring") == "eldenring.exe", "exe added when typed without .exe");
+            Ok(SettingsForm.CleanExe(" \"C:\\Games\\Elden Ring\\eldenring.exe\" ") == "eldenring.exe", "full path in quotes -> exe name");
+            Ok(SettingsForm.CleanExe("D:/Games/cs2.EXE") == "cs2.EXE", "forward slashes, keeps .EXE");
+            Ok(SettingsForm.CleanExe("   ") == "" && SettingsForm.CleanExe(null) == "", "empty ignored");
+
+            var apps = OpenApps.Clean(new[]
+            {
+                new OpenApp { Exe = "eldenring.exe", Title = "ELDEN RING" },
+                new OpenApp { Exe = "ELDENRING.EXE", Title = "second window" },
+                new OpenApp { Exe = "explorer.exe", Title = "Downloads" },
+                new OpenApp { Exe = "", Title = "no exe" },
+                new OpenApp { Exe = "Discord.exe", Title = "#general - Discord" },
+                new OpenApp { Exe = "x.exe", Title = new string('a', 80) },
+                null
+            });
+            Ok(apps.Count == 3, "one entry per exe, shells and blanks skipped (got " + apps.Count + ")");
+            Ok(apps[0].Exe == "Discord.exe" && apps[1].Exe == "x.exe" && apps[2].Exe == "eldenring.exe", "sorted by title");
+            Ok(apps[1].Title.Length == 48 && apps[1].Title.EndsWith("…"), "long titles shortened");
+
+            Ok(FizzSettings.FromJson("{\"SampleMs\":333}").SampleMs == 333, "3x per second kept");
+            Ok(FizzSettings.FromJson("{\"SampleMs\":350}").SampleMs == 333, "near 3x snaps to 3x");
+            Ok(FizzSettings.FromJson("{\"SampleMs\":500}").SampleMs == 500 && FizzSettings.FromJson("{\"SampleMs\":250}").SampleMs == 250, "2x and 4x unchanged");
         }
 
         static void Perf()
