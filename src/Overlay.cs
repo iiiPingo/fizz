@@ -140,9 +140,6 @@ namespace Fizz
             if (fonts) { fontScaleKey = -1; lastDpi = 0; }
         }
 
-        /// <summary>Screen rectangle the overlay currently occupies (for "is something covering it" checks).</summary>
-        public Native.RECT ScreenBounds { get; private set; }
-
         /// <param name="anchor">Area to pin the overlay into: the game's client area (windowed) or the monitor.</param>
         public void Render(OverlayContent c, IntPtr monitor, Native.RECT anchor)
         {
@@ -173,7 +170,6 @@ namespace Fizz
                 Point pos = Place(c, anchor, lastSize, scale);
                 Push(pos, lastSize, c.Opacity);
                 lastAnchor = anchor;
-                ScreenBounds = new Native.RECT { Left = pos.X, Top = pos.Y, Right = pos.X + lastSize.Width, Bottom = pos.Y + lastSize.Height };
             }
 
             if (!visible)
@@ -198,15 +194,15 @@ namespace Fizz
 
         static FontFamily overlayFamily;
 
-        /// <summary>Bahnschrift SemiBold (ships with Windows 10/11): tabular digits, compact HUD look. Falls back to Segoe UI.</summary>
+        /// <summary>Segoe UI Variable Display Semibold (Windows 11), the same family as the other Pingo apps. Segoe UI Semibold on Windows 10.</summary>
         static FontFamily OverlayFamily
         {
             get
             {
                 if (overlayFamily != null) return overlayFamily;
-                foreach (var name in new[] { "Bahnschrift SemiBold", "Bahnschrift", "Segoe UI Semibold", "Segoe UI" })
+                foreach (var name in new[] { "Segoe UI Variable Display Semibold", "Segoe UI Semibold", "Segoe UI" })
                 {
-                    try { overlayFamily = new FontFamily(name); break; } catch (ArgumentException) { }
+                    try { overlayFamily = new FontFamily(name); break; } catch (ArgumentException) { } // GDI+ throws for a missing font
                 }
                 return overlayFamily ?? (overlayFamily = FontFamily.GenericSansSerif);
             }
@@ -223,7 +219,7 @@ namespace Fizz
             float valuePx = px * 96f / 72f;
             var fam = OverlayFamily;
             valueFont = new Font(fam, valuePx, FontStyle.Regular, GraphicsUnit.Pixel);
-            labelFont = new Font(fam, valuePx * 0.9f, FontStyle.Regular, GraphicsUnit.Pixel);
+            labelFont = new Font(fam, valuePx * 0.8f, FontStyle.Regular, GraphicsUnit.Pixel); // labels (FPS, GPU...) smaller, like tags
             float em = fam.GetEmHeight(FontStyle.Regular), asc = fam.GetCellAscent(FontStyle.Regular);
             valueAscent = valueFont.Size * asc / em;
             labelAscent = labelFont.Size * asc / em;
@@ -300,7 +296,7 @@ namespace Fizz
         Size Draw(OverlayContent c, float scale)
         {
             if (g == null) EnsureSurface(64, 32);
-            float pad = 8 * scale, padV = 4 * scale, gapLV = 6 * scale, gapVV = 9 * scale, gapG = 14 * scale, rowGap = 1 * scale;
+            float pad = 10 * scale, padV = 5 * scale, gapLV = 6 * scale, gapVV = 9 * scale, gapG = 16 * scale, rowGap = 1 * scale;
             float lineH = valueFont.GetHeight(g) * 0.98f;
             float labelLift = valueAscent - labelAscent; // labels share the values' baseline
 
@@ -350,8 +346,8 @@ namespace Fizz
             g.CompositingMode = CompositingMode.SourceOver;
             if (c.Background)
             {
-                float radius = c.Vertical ? 8 * scale : ih / 2f;
-                Color edgeColor = Color.FromArgb(60, c.Accent);
+                float radius = c.Vertical ? 10 * scale : ih / 2f;
+                Color edgeColor = Color.FromArgb(70, c.Accent);
                 float edgeW = Math.Max(1f, scale);
                 if (edgePen == null || edgePen.Color != edgeColor || edgePen.Width != edgeW)
                 {
@@ -435,14 +431,31 @@ namespace Fizz
             return p;
         }
 
-        static Point Place(OverlayContent c, Native.RECT mon, Size size, float scale) // mon = anchor area
+        static Point Place(OverlayContent c, Native.RECT anchor, Size size, float scale)
         {
-            int m = (int)Math.Round(c.Margin * scale);
-            bool right = c.Corner == "TopRight" || c.Corner == "BottomRight";
-            bool bottom = c.Corner == "BottomLeft" || c.Corner == "BottomRight";
-            int x = right ? mon.Right - m - size.Width : mon.Left + m;
-            int y = bottom ? mon.Bottom - m - size.Height : mon.Top + m;
-            return new Point(x, y);
+            var r = PlacedRect(c.Corner, c.Margin, anchor, size, scale);
+            return new Point(r.Left, r.Top);
+        }
+
+        /// <summary>Where an overlay of <paramref name="size"/> sits inside <paramref name="anchor"/> (screen pixels).</summary>
+        public static Native.RECT PlacedRect(string corner, int margin, Native.RECT anchor, Size size, float scale)
+        {
+            int m = (int)Math.Round(margin * scale);
+            bool right = corner == "TopRight" || corner == "BottomRight";
+            bool bottom = corner == "BottomLeft" || corner == "BottomRight";
+            int x = right ? anchor.Right - m - size.Width : anchor.Left + m;
+            int y = bottom ? anchor.Bottom - m - size.Height : anchor.Top + m;
+            return new Native.RECT { Left = x, Top = y, Right = x + size.Width, Bottom = y + size.Height };
+        }
+
+        /// <summary>
+        /// Where the overlay sits (or would sit) when pinned to <paramref name="gameArea"/>, whatever it's showing right now.
+        /// Before the first draw it's the whole game area.
+        /// </summary>
+        public Native.RECT BoundsPinnedTo(Native.RECT gameArea, string corner, int margin)
+        {
+            if (lastSize.Width <= 0 || lastSize.Height <= 0) return gameArea;
+            return PlacedRect(corner, margin, gameArea, lastSize, lastDpi > 0 ? lastDpi / 96f : 1f);
         }
 
         void Push(Point pos, Size size, int opacityPct)

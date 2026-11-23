@@ -166,7 +166,7 @@ namespace Fizz
         Slider fontBar, opacityBar;
         Label fontVal, opacityVal, lookFor;
         CheckBox bgCheck;
-        Button accentBtn;
+        SwatchRow accentRow;
         DarkCombo cornerBox, modeBox, rateBox;
         DarkNum marginBox;
         // games page
@@ -192,38 +192,42 @@ namespace Fizz
             Icon = Theme.LoadIcon(32);
             BackColor = Theme.Bg;
             ForeColor = Theme.Text;
-            Font = new Font("Segoe UI", 9f);
+            Font = Theme.Ui(10f);
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(S96(780), S96(560));
+            ClientSize = new Size(S96(840), S96(576));
             AutoScaleMode = AutoScaleMode.None;
 
-            nav.SetBounds(0, 0, S96(150), S96(510)); nav.BackColor = Theme.Panel;
-            body.SetBounds(S96(150), 0, S96(630), S96(510)); body.BackColor = Theme.Bg;
-            footer.SetBounds(0, S96(510), S96(780), S96(50)); footer.BackColor = Theme.Panel;
+            nav.SetBounds(0, 0, S96(176), S96(524)); nav.BackColor = Theme.Nav;
+            body.SetBounds(S96(176), 0, S96(664), S96(524)); body.BackColor = Theme.Bg;
+            footer.SetBounds(0, S96(524), S96(840), S96(52)); footer.BackColor = Theme.Nav;
             Controls.AddRange(new Control[] { nav, body, footer });
 
-            var mark = new PictureBox { Image = Theme.LoadIcon(S96(28)).ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(S96(16), S96(16), S96(28), S96(28)), BackColor = Color.Transparent };
-            var logo = new Label { Text = "Fizz", Font = new Font("Segoe UI Semibold", 15f), ForeColor = Theme.Text, AutoSize = true, Location = new Point(S96(48), S96(15)) };
+            var mark = new PictureBox { Image = Theme.LoadIcon(S96(28)).ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(S96(18), S96(18), S96(28), S96(28)), BackColor = Color.Transparent };
+            var logo = new Label { Text = "Fizz", Font = Theme.UiTitle(15f), ForeColor = Theme.Text, AutoSize = true, Location = new Point(S96(52), S96(16)), BackColor = Color.Transparent };
             nav.Controls.Add(mark);
             nav.Controls.Add(logo);
             if (IsHandleCreated) Ui.DarkTitleBar(this); // the DPI check above already created the window
             BuildStatsPage(); BuildLookPage(); BuildGamesPage(); BuildAdvancedPage();
-            int y = S96(64);
-            foreach (var name in new[] { "Stats", "Look", "Games", "Advanced" })
+            int y = S96(70);
+            var glyphs = new[] { Theme.GStats, Theme.GLook, Theme.GGames, Theme.GAdvanced };
+            var names = new[] { "Stats", "Look", "Games", "Advanced" };
+            for (int i = 0; i < names.Length; i++)
             {
-                string n = name;
-                var b = NavButton(n, y);
+                string n = names[i];
+                var b = NavButton(n, glyphs[i], y);
                 b.Click += (s, e) => ShowPage(n);
                 nav.Controls.Add(b); navButtons.Add(b);
-                y += S96(40);
+                y += S96(42);
             }
 
-            status.SetBounds(S96(16), S96(8), S96(640), S96(36));
+            status.SetBounds(S96(18), S96(8), S96(700), S96(36));
             status.ForeColor = Theme.Sub;
+            status.TextAlign = ContentAlignment.MiddleLeft;
+            status.UseMnemonic = false;
             footer.Controls.Add(status);
-            var close = Btn("Close", S96(680), S96(11), S96(84));
+            var close = Btn("Close", S96(736), S96(11), S96(88));
             close.Click += (s, e) => Close();
             footer.Controls.Add(close);
 
@@ -238,12 +242,12 @@ namespace Fizz
 
         // ---------- small control factories ----------
 
-        Button NavButton(string text, int y)
+        Button NavButton(string text, string glyph, int y)
         {
             return new RoundButton
             {
-                Text = text, NavStyle = true, ForeColor = Theme.Sub, BackColor = Theme.Panel, Font = new Font("Segoe UI Semibold", 9.75f),
-                Bounds = new Rectangle(S96(10), y, S96(130), S96(36)), Tag = text
+                Text = text, Glyph = glyph, NavStyle = true, ForeColor = Theme.Sub, BackColor = Theme.Nav, Font = Theme.Ui(10.5f),
+                Bounds = new Rectangle(S96(10), y, S96(156), S96(38)), Tag = text
             };
         }
 
@@ -254,7 +258,7 @@ namespace Fizz
 
         static Label Lbl(Control parent, string text, int x, int y, Color? color = null, Font font = null)
         {
-            var l = new Label { Text = text, AutoSize = true, Location = new Point(x, y), ForeColor = color ?? Theme.Sub, BackColor = Color.Transparent };
+            var l = new Label { Text = text, AutoSize = true, Location = new Point(x, y), ForeColor = color ?? Theme.Sub, BackColor = Color.Transparent, UseMnemonic = false };
             if (font != null) l.Font = font;
             parent.Controls.Add(l);
             return l;
@@ -315,7 +319,7 @@ namespace Fizz
             var p = new Panel { Bounds = new Rectangle(0, 0, body.Width, body.Height), BackColor = Theme.Bg, Visible = false };
             body.Controls.Add(p);
             pages[name] = p;
-            Lbl(p, name, S96(24), S96(16), Theme.Text, new Font("Segoe UI Semibold", 13f));
+            Lbl(p, name, S96(24), S96(14), Theme.Text, Theme.UiTitle(15f));
             return p;
         }
 
@@ -365,11 +369,11 @@ namespace Fizz
                 Changed();
             };
             statList.SelectedIndexChanged += (s, e) => LoadStatDetails();
-            var up = Btn("↑", S96(24), S96(462), S96(40)); up.Click += (s, e) => statList.MoveItem(statList.SelectedIndex, statList.SelectedIndex - 1); p.Controls.Add(up);
-            var dn = Btn("↓", S96(70), S96(462), S96(40)); dn.Click += (s, e) => statList.MoveItem(statList.SelectedIndex, statList.SelectedIndex + 1); p.Controls.Add(dn);
+            var up = Btn("", S96(24), S96(462), S96(40)); ((RoundButton)up).Glyph = Theme.GUp; up.Click += (s, e) => statList.MoveItem(statList.SelectedIndex, statList.SelectedIndex - 1); p.Controls.Add(up);
+            var dn = Btn("", S96(70), S96(462), S96(40)); ((RoundButton)dn).Glyph = Theme.GDown; dn.Click += (s, e) => statList.MoveItem(statList.SelectedIndex, statList.SelectedIndex + 1); p.Controls.Add(dn);
 
             int x = S96(336);
-            statTitle = Lbl(p, "", x, S96(116), Theme.Text, new Font("Segoe UI Semibold", 10.5f));
+            statTitle = Lbl(p, "", x, S96(116), Theme.Text, Theme.UiSemi(10.5f));
             showLabel = Chk(p, "Show label (e.g. \"GPU\")", x, S96(150), (s, e) => { var it = SelectedItem(); if (it != null) { it.Label = showLabel.Checked; Changed(); } });
             showUnit = Chk(p, "Show unit (64°C vs 64°)", x, S96(178), (s, e) => { var it = SelectedItem(); if (it != null) { it.Unit = showUnit.Checked; Changed(); } });
 
@@ -407,7 +411,7 @@ namespace Fizz
                 opacityVal.Text = pr.Opacity + "%";
                 bgCheck.Checked = pr.Background;
                 Color c; FizzSettings.TryColor(pr.Accent, out c);
-                accentBtn.BackColor = c.IsEmpty ? Theme.Accent : c;
+                accentRow.Value = c.IsEmpty ? Theme.Accent : c;
                 lookFor.Text = "Look of preset \"" + pr.Name + "\"";
             }
             finally { loading = false; }
@@ -469,7 +473,7 @@ namespace Fizz
             string name = Prompt("New preset", "Name for the new preset (copies the current one):", "My preset");
             if (string.IsNullOrWhiteSpace(name)) return;
             name = name.Trim();
-            if (S.FindPreset(name) != null) { MessageBox.Show(this, "A preset with that name already exists.", "Fizz"); return; }
+            if (S.FindPreset(name) != null) { Notice("A preset with that name already exists."); return; }
             S.Presets.Add(EditingPreset.Clone(name));
             S.ActivePreset = name;
             Changed();
@@ -482,7 +486,7 @@ namespace Fizz
             string name = Prompt("Rename preset", "New name:", pr.Name);
             if (string.IsNullOrWhiteSpace(name) || name.Trim() == pr.Name) return;
             name = name.Trim();
-            if (S.FindPreset(name) != null) { MessageBox.Show(this, "A preset with that name already exists.", "Fizz"); return; }
+            if (S.FindPreset(name) != null) { Notice("A preset with that name already exists."); return; }
             foreach (var g in S.Games) if (string.Equals(g.Preset, pr.Name, StringComparison.OrdinalIgnoreCase)) g.Preset = name;
             pr.Name = name;
             S.ActivePreset = name;
@@ -492,9 +496,9 @@ namespace Fizz
 
         void DeletePreset()
         {
-            if (S.Presets.Count <= 1) { MessageBox.Show(this, "You need at least one preset.", "Fizz"); return; }
+            if (S.Presets.Count <= 1) { Notice("You need at least one preset."); return; }
             var pr = EditingPreset;
-            if (MessageBox.Show(this, "Delete preset \"" + pr.Name + "\"?", "Fizz", MessageBoxButtons.YesNo) != DialogResult.Yes) return;
+            if (!Confirm("Delete preset \"" + pr.Name + "\"?", "Delete")) return;
             S.Presets.Remove(pr);
             foreach (var g in S.Games) if (string.Equals(g.Preset, pr.Name, StringComparison.OrdinalIgnoreCase)) g.Preset = "";
             S.ActivePreset = S.Presets[0].Name;
@@ -502,17 +506,53 @@ namespace Fizz
             RefreshFromApp();
         }
 
+        Form DialogForm(string title, int h)
+        {
+            var f = new Form
+            {
+                Text = title, BackColor = Theme.Bg, ForeColor = Theme.Text, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false,
+                ShowInTaskbar = false, StartPosition = FormStartPosition.CenterParent, ClientSize = new Size(S96(360), h), Font = Font, AutoScaleMode = AutoScaleMode.None
+            };
+            f.HandleCreated += (s, e) => Ui.DarkTitleBar(f);
+            return f;
+        }
+
         string Prompt(string title, string text, string value)
         {
-            using (var f = new Form { Text = title, BackColor = Theme.Bg, ForeColor = Theme.Text, FormBorderStyle = FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false, StartPosition = FormStartPosition.CenterParent, ClientSize = new Size(S96(340), S96(120)), Font = Font })
+            using (var f = DialogForm(title, S96(128)))
             {
-                Lbl(f, text, S96(14), S96(14), Theme.Text);
-                var t = Txt(f, S96(14), S96(40), S96(312)); t.Text = value;
-                var ok = Btn("OK", S96(170), S96(80), S96(74)); ok.DialogResult = DialogResult.OK; f.Controls.Add(ok);
-                var cancel = Btn("Cancel", S96(252), S96(80), S96(74)); cancel.DialogResult = DialogResult.Cancel; f.Controls.Add(cancel);
+                Lbl(f, text, S96(16), S96(16), Theme.Text);
+                var t = Txt(f, S96(16), S96(44), S96(328)); t.Text = value;
+                var ok = Btn("OK", S96(178), S96(86), S96(80)); ok.DialogResult = DialogResult.OK; f.Controls.Add(ok);
+                var cancel = Btn("Cancel", S96(264), S96(86), S96(80)); cancel.DialogResult = DialogResult.Cancel; f.Controls.Add(cancel);
                 f.AcceptButton = ok; f.CancelButton = cancel;
-                f.Shown += (s, e) => Ui.DarkTitleBar(f);
                 return f.ShowDialog(this) == DialogResult.OK ? t.Text : null;
+            }
+        }
+
+        /// <summary>Dark yes/no question (replaces the white Windows message box).</summary>
+        bool Confirm(string text, string yes)
+        {
+            using (var f = DialogForm("Fizz", S96(118)))
+            {
+                var l = Lbl(f, text, S96(16), S96(18), Theme.Text);
+                l.AutoSize = false; l.Size = new Size(S96(328), S96(44));
+                var ok = Btn(yes, S96(178), S96(76), S96(80)); ok.DialogResult = DialogResult.OK; f.Controls.Add(ok);
+                var cancel = Btn("Cancel", S96(264), S96(76), S96(80)); cancel.DialogResult = DialogResult.Cancel; f.Controls.Add(cancel);
+                f.AcceptButton = ok; f.CancelButton = cancel;
+                return f.ShowDialog(this) == DialogResult.OK;
+            }
+        }
+
+        void Notice(string text)
+        {
+            using (var f = DialogForm("Fizz", S96(118)))
+            {
+                var l = Lbl(f, text, S96(16), S96(18), Theme.Text);
+                l.AutoSize = false; l.Size = new Size(S96(328), S96(44));
+                var ok = Btn("OK", S96(264), S96(76), S96(80)); ok.DialogResult = DialogResult.OK; f.Controls.Add(ok);
+                f.AcceptButton = ok; f.CancelButton = ok;
+                f.ShowDialog(this);
             }
         }
 
@@ -547,16 +587,10 @@ namespace Fizz
 
             y += S96(36);
             Lbl(p, "Accent color", x, y + 5);
-            accentBtn = Btn("", x2, y, S96(60));
-            accentBtn.Click += (s, e) =>
-            {
-                using (var cd = new ColorDialog { Color = accentBtn.BackColor, FullOpen = true })
-                    if (cd.ShowDialog(this) == DialogResult.OK) { accentBtn.BackColor = cd.Color; EditingPreset.Accent = Theme.Hex(cd.Color); Changed(); }
-            };
-            p.Controls.Add(accentBtn);
-            var reset = Btn("Fizz pink", x2 + S96(70), y, S96(90));
-            reset.Click += (s, e) => { accentBtn.BackColor = Theme.Accent; EditingPreset.Accent = Theme.Hex(Theme.Accent); Changed(); };
-            p.Controls.Add(reset);
+            int sw = S96(24);
+            accentRow = new SwatchRow { Bounds = new Rectangle(x2, y + S96(3), (int)Math.Ceiling(sw * 1.18f * (Theme.Swatches.Length - 1)) + sw + 2, sw), BackColor = Theme.Bg };
+            accentRow.Picked += (s, e) => { EditingPreset.Accent = Theme.Hex(accentRow.Value); Changed(); };
+            p.Controls.Add(accentRow);
 
             y += S96(52);
             Lbl(p, "These apply to all presets:", x, y, Theme.Dim);
@@ -581,7 +615,7 @@ namespace Fizz
         void BuildGamesPage()
         {
             var p = Page("Games");
-            Lbl(p, "Per-game rules (by exe name). Hidden games never draw the overlay, so there's zero added latency.", S96(24), S96(52), Theme.Dim);
+            Lbl(p, "Rules per game (by exe name). Hidden games never draw the overlay: zero added latency.", S96(24), S96(52), Theme.Dim);
             gameList = MakeList(p, new Rectangle(S96(24), S96(78), S96(330), S96(220)));
             gameList.TextOf = o => ((GameRule)o).Exe;
             gameList.SubTextOf = o =>
@@ -610,24 +644,23 @@ namespace Fizz
             remove.Click += (s, e) => { var g = gameList.SelectedItem as GameRule; if (g != null) { S.Games.Remove(g); Changed(); LoadGames(); } };
             p.Controls.Add(remove);
 
-            gameInput = Txt(p, S96(24), S96(308), S96(200));
-            var add = Btn("Add exe", S96(232), S96(307), S96(80));
+            gameInput = Txt(p, S96(24), S96(308), S96(180));
+            var add = Btn("Add exe", S96(212), S96(307), S96(84));
             add.Click += (s, e) => AddGame(gameInput.Text);
             p.Controls.Add(add);
-            addCurrent = Btn("Add last game", S96(318), S96(307), S96(200));
-            addCurrent.Width = S96(200);
+            addCurrent = Btn("Add last game", S96(304), S96(307), S96(196));
             addCurrent.Click += (s, e) => AddGame(app.LastGameExe);
             p.Controls.Add(addCurrent);
-            notGameBtn = Btn("Not a game", S96(524), S96(307), S96(80));
+            notGameBtn = Btn("Not a game", S96(508), S96(307), S96(104));
             notGameBtn.Click += (s, e) => { app.MarkNotGame(app.LastGameExe); LoadGames(); };
             p.Controls.Add(notGameBtn);
 
             Lbl(p, "Never treat these as games (one exe per line). Browsers and video players are here by default:", S96(24), S96(350), Theme.Dim);
-            var ngHost = new RoundHost { Bounds = new Rectangle(S96(24), S96(372), S96(580), S96(120)), BackColor = Theme.Card };
+            var ngHost = new RoundHost { Bounds = new Rectangle(S96(24), S96(374), S96(588), S96(120)), BackColor = Theme.Card };
             notGamesBox = new TextBox
             {
                 Multiline = true, ScrollBars = ScrollBars.Vertical, BackColor = Theme.Card, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, Font = Font,
-                Bounds = new Rectangle(S96(10), S96(8), S96(562), S96(104))
+                Bounds = new Rectangle(S96(10), S96(8), S96(570), S96(104))
             };
             notGamesBox.HandleCreated += (s, e) => Ui.DarkScrollbars(notGamesBox);
             var ngTimer = new Timer { Interval = 600 };
@@ -739,7 +772,7 @@ namespace Fizz
             summaryCheck = Chk(p, "Session summaries (only for games you turn it on for, on the Games page)", x, y, (s, e) => { S.SessionSummary = summaryCheck.Checked; Changed(); });
             y += S96(28);
             csvCheck = Chk(p, "Log stats to a CSV file per game session", x, y, (s, e) => { S.CsvLog = csvCheck.Checked; Changed(); });
-            var openLogs = new LinkLabel { Text = "open logs", AutoSize = true, Location = new Point(x + S96(300), y + 2), LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text };
+            var openLogs = new LinkLabel { Text = "open logs", AutoSize = true, Location = new Point(csvCheck.Right + S96(8), y + 1), LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text, LinkBehavior = LinkBehavior.HoverUnderline };
             openLogs.Click += (s, e) => { string d = System.IO.Path.Combine(Log.Dir, "logs"); System.IO.Directory.CreateDirectory(d); Process.Start("explorer.exe", "\"" + d + "\""); };
             p.Controls.Add(openLogs);
 
@@ -748,9 +781,9 @@ namespace Fizz
             y += S96(22);
             var tip = Lbl(p, "Windows Settings → System → Display → Graphics → Advanced graphics settings (or \"Change default graphics settings\"): turn on " +
                              "\"Optimizations for windowed games\" and \"Hardware-accelerated GPU scheduling\". Add competitive games to the Games page as hidden.", x, y, Theme.Sub);
-            tip.AutoSize = false; tip.Size = new Size(S96(580), S96(52));
+            tip.AutoSize = false; tip.Size = new Size(S96(610), S96(66));
 
-            y += S96(66);
+            y += S96(78);
             var diag = Btn("Write diagnostics", x, y, S96(140));
             diag.Click += (s, e) => { app.WriteStatus(); app.WriteSensorDump(); Process.Start("explorer.exe", "/select,\"" + System.IO.Path.Combine(Log.Dir, "status.txt") + "\""); };
             p.Controls.Add(diag);
@@ -758,7 +791,7 @@ namespace Fizz
             folder.Click += (s, e) => Process.Start("explorer.exe", "\"" + Log.Dir + "\"");
             p.Controls.Add(folder);
             // the "hidden" sensor picker: a quiet link, not a big button
-            var pick = new LinkLabel { Text = "sensor picker…", AutoSize = true, Location = new Point(S96(520), y + 6), LinkColor = Theme.Dim, ActiveLinkColor = Theme.Accent };
+            var pick = new LinkLabel { Text = "sensor picker…", AutoSize = true, Location = new Point(S96(520), y + 6), LinkColor = Theme.Dim, ActiveLinkColor = Theme.Accent, LinkBehavior = LinkBehavior.HoverUnderline };
             pick.Click += (s, e) =>
             {
                 if (picker == null || picker.IsDisposed) picker = new SensorPickerForm(app);
@@ -829,7 +862,7 @@ namespace Fizz
             using (var g = CreateGraphics()) k = g.DpiX / 96f;
             Text = "Fizz sensor picker";
             Icon = Theme.LoadIcon(32);
-            BackColor = Theme.Bg; ForeColor = Theme.Text; Font = new Font("Segoe UI", 9f);
+            BackColor = Theme.Bg; ForeColor = Theme.Text; Font = Theme.Ui(10f);
             FormBorderStyle = FormBorderStyle.FixedSingle; MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterParent;
             ClientSize = new Size(S96(620), S96(470));

@@ -133,6 +133,7 @@ namespace Fizz
             tray.Icon = Theme.LoadTrayIcon(SystemInformation.SmallIconSize.Width);
             tray.Text = "Fizz";
             menu.Renderer = new DarkMenuRenderer();
+            menu.Font = Theme.Ui(10f);
             menu.ShowImageMargin = true;
             menu.Opening += (s, e) => BuildMenu();
             tray.ContextMenuStrip = menu;
@@ -418,12 +419,16 @@ namespace Fizz
 
             // Alt-tabbed away: keep the overlay on the game while the game is still visible
             // and the window you switched to doesn't sit on top of the overlay (e.g. Discord on the other monitor).
+            // Checked against where the overlay sits ON THE GAME, never where it is right now: in "Always" mode
+            // the overlay jumps to the screen corner when this says no, and checking that spot made it say yes
+            // again next tick, so it bounced between the game window and the screen edge 4 times a second.
             bool overGame = false;
             if (!gameInFront && gamePid != 0 && gameHwnd != IntPtr.Zero && Native.IsWindow(gameHwnd) && Native.IsWindowVisible(gameHwnd) && !Native.IsIconic(gameHwnd))
             {
-                var ob = overlay.ScreenBounds;
-                bool covered = ob.Width > 0 && !fg.IsDesktop && !fg.IsMinimized && Native.Intersects(fg.WindowRect, ob);
-                overGame = !covered;
+                Native.RECT gameArea;
+                if (!Native.ClientRectOnScreen(gameHwnd, out gameArea)) Native.GetWindowRect(gameHwnd, out gameArea);
+                var onGame = overlay.BoundsPinnedTo(gameArea, Settings.Corner, Settings.Margin);
+                overGame = StaysOnGame(fg.WindowRect, fg.IsDesktop, fg.IsMinimized, onGame);
                 if (overGame) lastGameFrontTicks = now;
             }
             bool gameShown = gameInFront || overGame;
@@ -491,6 +496,16 @@ namespace Fizz
                 tray.Text = t.Length > 63 ? t.Substring(0, 63) : t;
             }
             if ((DateTime.UtcNow - lastStatusUtc).TotalSeconds >= 60) { lastStatusUtc = DateTime.UtcNow; WriteStatus(); }
+        }
+
+        /// <summary>
+        /// After alt-tab: does the overlay stay on the game? Yes unless the window now in front overlaps the
+        /// overlay's spot on the game. <paramref name="overlayOnGame"/> must not depend on where the overlay is now.
+        /// </summary>
+        public static bool StaysOnGame(Native.RECT frontWindow, bool frontIsDesktop, bool frontMinimized, Native.RECT overlayOnGame)
+        {
+            if (overlayOnGame.Width <= 0 || overlayOnGame.Height <= 0) return false;
+            return frontIsDesktop || frontMinimized || !Native.Intersects(frontWindow, overlayOnGame);
         }
 
         DateTime lastPawnCheckUtc = DateTime.MinValue;
@@ -714,22 +729,28 @@ namespace Fizz
 
         // ================= tray menu =================
 
+        Font headFont;
+
         void BuildMenu()
         {
+            // the menu is rebuilt on every open: free the old items (and their submenus) instead of leaking them
+            var old = new ToolStripItem[menu.Items.Count];
+            menu.Items.CopyTo(old, 0);
             menu.Items.Clear();
-            var head = new ToolStripMenuItem("Fizz" + (Elevated ? "" : "  (limited: not admin)")) { Enabled = false };
-            head.Font = new Font(menu.Font, FontStyle.Bold);
+            foreach (var it in old) it.Dispose();
+            var head = new ToolStripMenuItem("Fizz" + (Elevated ? "" : "  (limited: not admin)")) { Enabled = false, Padding = new Padding(0, 4, 0, 4) };
+            head.Font = headFont ?? (headFont = Theme.UiSemi(10f));
             menu.Items.Add(head);
             menu.Items.Add(new ToolStripSeparator());
 
-            var show = new ToolStripMenuItem("Overlay");
+            var show = Item("Overlay", null);
             show.DropDownItems.Add(Check("Only in games (auto)", !Settings.AlwaysShow, () => { Settings.Mode = "Auto"; SettingsChanged(); }));
             show.DropDownItems.Add(Check("Always on", Settings.AlwaysShow, () => { Settings.Mode = "Always"; SettingsChanged(); }));
             show.DropDownItems.Add(new ToolStripSeparator());
             show.DropDownItems.Add(Check("Hidden for now    " + Settings.HotkeyToggle, userHidden, () => { userHidden = !userHidden; }));
             menu.Items.Add(show);
 
-            var presets = new ToolStripMenuItem("Preset");
+            var presets = Item("Preset", null);
             foreach (var p in Settings.Presets)
             {
                 var name = p.Name;
@@ -738,12 +759,12 @@ namespace Fizz
             menu.Items.Add(presets);
 
             var active = Settings.Active;
-            var layout = new ToolStripMenuItem("Layout");
+            var layout = Item("Layout", null);
             layout.DropDownItems.Add(Check("Horizontal", !active.Vertical, () => { Settings.Active.Layout = "Horizontal"; SettingsChanged(); }));
             layout.DropDownItems.Add(Check("Vertical", active.Vertical, () => { Settings.Active.Layout = "Vertical"; SettingsChanged(); }));
             menu.Items.Add(layout);
 
-            var pos = new ToolStripMenuItem("Position");
+            var pos = Item("Position", null);
             foreach (var c in new[] { "TopLeft", "TopRight", "BottomLeft", "BottomRight" })
             {
                 string corner = c;
@@ -809,8 +830,8 @@ namespace Fizz
 
         static ToolStripMenuItem Item(string text, Action a)
         {
-            var i = new ToolStripMenuItem(text) { ForeColor = Theme.Text };
-            i.Click += (s, e) => Safe("menu", a);
+            var i = new ToolStripMenuItem(text) { ForeColor = Theme.Text, Padding = new Padding(0, 4, 0, 4) };
+            if (a != null) i.Click += (s, e) => Safe("menu", a);
             return i;
         }
 

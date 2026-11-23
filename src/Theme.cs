@@ -20,6 +20,42 @@ namespace Fizz
         public static readonly Color Accent = Color.FromArgb(255, 92, 158);
         public static readonly Color AccentDark = Color.FromArgb(120, 38, 78);
         public static readonly Color Warn = Color.FromArgb(255, 184, 0);
+        public static readonly Color Nav = Color.FromArgb(27, 27, 27);
+
+        // the family accent colours (the same swatches every Pingo app offers), Fizz pink first
+        public static readonly Color[] Swatches =
+        {
+            Color.FromArgb(255, 92, 158),   // Fizz pink
+            Color.FromArgb(217, 154, 98),   // Echoa cocoa
+            Color.FromArgb(76, 168, 255),   // blue
+            Color.FromArgb(61, 219, 176),   // mint
+            Color.FromArgb(95, 208, 104),   // Juice green
+            Color.FromArgb(242, 193, 78),   // honey
+            Color.FromArgb(255, 138, 61),   // Pulp tangerine
+            Color.FromArgb(208, 100, 74),   // Pour terracotta
+            Color.FromArgb(242, 95, 92),    // cherry red
+            Color.FromArgb(176, 124, 255),  // ube
+            Color.FromArgb(200, 200, 200),  // silver
+        };
+
+        // fonts: Segoe UI Variable on Windows 11, Segoe UI on Windows 10 (same as the other Pingo apps)
+        static bool FontExists(string name)
+        {
+            try { using (var f = new Font(name, 10)) return f.Name == name; } catch { return false; }
+        }
+        static readonly string UiFamily = FontExists("Segoe UI Variable Text") ? "Segoe UI Variable Text" : "Segoe UI";
+        static readonly string UiSemiFamily = FontExists("Segoe UI Variable Text Semibold") ? "Segoe UI Variable Text Semibold"
+            : FontExists("Segoe UI Semibold") ? "Segoe UI Semibold" : null;
+        static readonly string UiDisplaySemi = FontExists("Segoe UI Variable Display Semibold") ? "Segoe UI Variable Display Semibold" : null;
+        public static readonly string IconFont = FontExists("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
+        public static Font Ui(float size) { return new Font(UiFamily, size); }
+        public static Font UiSemi(float size) { return UiSemiFamily != null ? new Font(UiSemiFamily, size) : new Font(UiFamily, size, FontStyle.Bold); }
+        public static Font UiTitle(float size) { return UiDisplaySemi != null ? new Font(UiDisplaySemi, size) : UiSemi(size); }
+
+        // Segoe Fluent Icons / MDL2 glyphs
+        public const string GStats = "\uE9D9", GLook = "\uE790", GGames = "\uE7FC", GAdvanced = "\uE713", GUp = "\uE70E", GDown = "\uE70D", GCheck = "\uE73E";
+
+        public static bool Win11 { get { return Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= 22000; } }
 
         public static string Hex(Color c) { return "#" + c.R.ToString("X2") + c.G.ToString("X2") + c.B.ToString("X2"); }
 
@@ -45,9 +81,51 @@ namespace Fizz
         }
     }
 
+    /// <summary>
+    /// Windows 11 style dark menus: rounded popup corners, rounded hover highlight, a plain accent tick
+    /// instead of the old square check box, roomier rows.
+    /// </summary>
     internal sealed class DarkMenuRenderer : ToolStripProfessionalRenderer
     {
         public DarkMenuRenderer() : base(new DarkColors()) { RoundedEdges = false; }
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        /// <summary>Rounded popup corners (Windows 11; ignored on 10).</summary>
+        static void RoundPopup(ToolStrip ts)
+        {
+            if (!(ts is ToolStripDropDown) || !ts.IsHandleCreated || !Theme.Win11) return;
+            try { int round = 2; DwmSetWindowAttribute(ts.Handle, 33, ref round, 4); } catch { } // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            RoundPopup(e.ToolStrip);
+            using (var b = new SolidBrush(Theme.Panel)) e.Graphics.FillRectangle(b, e.AffectedBounds);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            // Windows 11 draws its own thin border around the rounded popup
+            if (Theme.Win11 && e.ToolStrip is ToolStripDropDown) return;
+            using (var p = new Pen(Theme.Border)) e.Graphics.DrawRectangle(p, 0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
+        }
+
+        protected override void OnRenderImageMargin(ToolStripRenderEventArgs e) { } // no grey strip down the left
+
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (!e.Item.Selected || !e.Item.Enabled) return;
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            var r = new RectangleF(4, 1, e.Item.Width - 8, e.Item.Height - 2);
+            Ui.Fill(e.Graphics, r, e.Item.Pressed ? Theme.Selected : Theme.Hover, 4);
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            int y = e.Item.Height / 2;
+            using (var p = new Pen(Theme.Border)) e.Graphics.DrawLine(p, 12, y, e.Item.Width - 12, y);
+        }
 
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
@@ -57,20 +135,24 @@ namespace Fizz
 
         protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
         {
-            e.ArrowColor = Theme.Sub;
-            base.OnRenderArrow(e);
+            // thin chevron instead of the solid triangle
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var r = e.ArrowRectangle;
+            float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f, s = Math.Max(3f, r.Height * 0.18f);
+            using (var p = new Pen(Theme.Sub, 1.5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawLines(p, new[] { new PointF(cx - s / 2, cy - s), new PointF(cx + s / 2, cy), new PointF(cx - s / 2, cy + s) });
         }
 
         protected override void OnRenderItemCheck(ToolStripItemImageRenderEventArgs e)
         {
-            var r = new Rectangle(e.ImageRectangle.X - 2, e.ImageRectangle.Y - 2, e.ImageRectangle.Width + 4, e.ImageRectangle.Height + 4);
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var b = new SolidBrush(Theme.AccentDark)) e.Graphics.FillRectangle(b, r);
-            using (var p = new Pen(Theme.Accent, 2f))
-            {
-                int cx = r.X + r.Width / 2, cy = r.Y + r.Height / 2, k = Math.Max(3, r.Width / 5);
-                e.Graphics.DrawLines(p, new[] { new Point(cx - k - 1, cy), new Point(cx - 1, cy + k), new Point(cx + k + 1, cy - k) });
-            }
+            // just a tick in the accent colour, no box
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var r = e.ImageRectangle;
+            float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f, k = Math.Max(3.5f, r.Width * 0.26f);
+            using (var p = new Pen(Theme.Accent, Math.Max(1.8f, r.Width / 9f)) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round })
+                g.DrawLines(p, new[] { new PointF(cx - k, cy + 0.1f * k), new PointF(cx - 0.3f * k, cy + 0.75f * k), new PointF(cx + k, cy - 0.7f * k) });
         }
 
         sealed class DarkColors : ProfessionalColorTable
@@ -80,7 +162,7 @@ namespace Fizz
             public override Color ImageMarginGradientMiddle { get { return Theme.Panel; } }
             public override Color ImageMarginGradientEnd { get { return Theme.Panel; } }
             public override Color MenuBorder { get { return Theme.Border; } }
-            public override Color MenuItemBorder { get { return Theme.Hover; } }
+            public override Color MenuItemBorder { get { return Color.Transparent; } }
             public override Color MenuItemSelected { get { return Theme.Hover; } }
             public override Color MenuItemSelectedGradientBegin { get { return Theme.Hover; } }
             public override Color MenuItemSelectedGradientEnd { get { return Theme.Hover; } }
@@ -88,9 +170,9 @@ namespace Fizz
             public override Color MenuItemPressedGradientEnd { get { return Theme.Selected; } }
             public override Color SeparatorDark { get { return Theme.Border; } }
             public override Color SeparatorLight { get { return Theme.Border; } }
-            public override Color CheckBackground { get { return Theme.AccentDark; } }
-            public override Color CheckSelectedBackground { get { return Theme.AccentDark; } }
-            public override Color CheckPressedBackground { get { return Theme.AccentDark; } }
+            public override Color CheckBackground { get { return Color.Transparent; } }
+            public override Color CheckSelectedBackground { get { return Color.Transparent; } }
+            public override Color CheckPressedBackground { get { return Color.Transparent; } }
         }
     }
 

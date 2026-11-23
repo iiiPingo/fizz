@@ -14,13 +14,20 @@
 
 ## Install
 1. Install the **PawnIO** driver from [pawnio.eu](https://pawnio.eu) (lets Fizz read CPU temperature; replaces the old WinRing0 driver).
-2. Download `Fizz-1.0.zip` from [Releases](../../releases/latest), unzip it into its own folder and run `Fizz.exe` (click Yes on the UAC prompt).
+2. Download the `Fizz-x.y.z.zip` from [Releases](../../releases/latest), unzip it into its own folder and run `Fizz.exe` (click Yes on the UAC prompt).
    Fizz creates a logon task, so after that it starts with Windows without prompts.
 
 Exclusive fullscreen can't be drawn over by anything that isn't injected, so run games in borderless mode. Note: some anti-cheats (e.g. FACEIT) may block the PawnIO driver.
 
+## What's new
+**1.2.0**
+- Fixed: after you switched away from a windowed game, the overlay could jump back and forth between the game and the screen corner (most noticeable with "Always" on).
+- New look to match the other Pingo apps: Segoe UI Variable font in the overlay and settings, icons in the side menu, and a tray menu with Windows 11 rounded corners and ticks instead of square check boxes.
+- Accent colour is now a row of colour dots (the same colours as the other apps) instead of the old Windows colour box.
+- Questions like "Delete preset?" now use a dark box instead of the white Windows one.
+
 ## Build
-`build.sh` builds `out/Fizz.exe` with Mono's `mcs` against the .NET Framework 4.8 reference assemblies and the LibreHardwareMonitor DLLs in `lib/lhm096`. Unit tests are in `tests/`.
+`build.sh` builds `out/Fizz.exe` with Mono's `mcs` against the .NET Framework 4.8 reference assemblies and the LibreHardwareMonitor DLLs in `lib/lhm096`. Unit tests are in `tests/Tests.cs`.
 
 ## Third-party
 - [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) 0.9.6 (MPL-2.0), DLLs in `lib/lhm096`

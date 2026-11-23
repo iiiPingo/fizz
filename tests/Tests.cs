@@ -37,6 +37,7 @@ namespace Fizz.Tests
             Formatting();
             SettingsTests();
             Hotkeys();
+            OverlayStaysPut();
             Perf();
             Console.WriteLine("\n" + pass + " passed, " + fail + " failed (" + sw.ElapsedMilliseconds + " ms)");
             return fail == 0 ? 0 : 1;
@@ -285,6 +286,41 @@ namespace Fizz.Tests
             Ok(HubWindow.ParseHotkey("Alt+1", out m, out v) && v == 0x31, "Alt+1");
             Ok(!HubWindow.ParseHotkey("F", out m, out v), "needs a modifier");
             Ok(!HubWindow.ParseHotkey("Ctrl+Alt+Banana", out m, out v), "rejects junk");
+        }
+
+        static Native.RECT R(int l, int t, int r, int b) { return new Native.RECT { Left = l, Top = t, Right = r, Bottom = b }; }
+
+        // Bug: with "Always on", after alt-tabbing away from a windowed game the overlay bounced between the
+        // game window and the screen corner 4x a second, because the "is it covered?" check used its current spot.
+        static void OverlayStaysPut()
+        {
+            var monitor = R(0, 0, 1920, 1080);
+            var game = R(400, 200, 1520, 880);            // windowed game in the middle of the screen
+            var front = R(300, 150, 900, 600);            // the app you switched to: covers the game's top-left, not the screen's
+            var size = new System.Drawing.Size(300, 30);
+
+            var onGame = OverlayWindow.PlacedRect("TopLeft", 10, game, size, 1f);
+            var onScreen = OverlayWindow.PlacedRect("TopLeft", 10, monitor, size, 1f);
+            Ok(onGame.Left == 410 && onGame.Top == 210 && onGame.Right == 710 && onGame.Bottom == 240, "overlay pinned inside the game window");
+            var br = OverlayWindow.PlacedRect("BottomRight", 10, monitor, size, 1.5f);
+            Ok(br.Right == 1905 && br.Bottom == 1065, "bottom-right corner with 150% scaling");
+
+            // simulate ticks: the overlay goes on the game if StaysOnGame says so, else to the screen corner ("Always on")
+            var pos = onGame;
+            int moves = 0;
+            for (int tick = 0; tick < 12; tick++)
+            {
+                bool stays = FizzApp.StaysOnGame(front, false, false, onGame);
+                var next = stays ? onGame : onScreen;
+                if (next.Left != pos.Left || next.Top != pos.Top) moves++;
+                pos = next;
+            }
+            Ok(moves <= 1, "overlay moves at most once after alt-tab, never back and forth (moved " + moves + "x)");
+
+            Ok(FizzApp.StaysOnGame(R(1920, 0, 3840, 1080), false, false, onGame), "app on the other monitor: overlay stays on the game");
+            Ok(!FizzApp.StaysOnGame(front, false, false, onGame), "app over the overlay's spot: overlay leaves the game");
+            Ok(FizzApp.StaysOnGame(front, true, false, onGame), "desktop in front: overlay stays on the game");
+            Ok(!FizzApp.StaysOnGame(R(1920, 0, 3840, 1080), false, false, new Native.RECT()), "no game area: don't claim the overlay is on the game");
         }
 
         static void Perf()

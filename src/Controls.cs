@@ -41,7 +41,7 @@ namespace Fizz
             {
                 int on = 1;
                 if (DwmSetWindowAttribute(f.Handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(f.Handle, 19, ref on, 4);
-                int caption = ColorTranslator.ToWin32(Theme.Panel);
+                int caption = ColorTranslator.ToWin32(Theme.Nav);
                 DwmSetWindowAttribute(f.Handle, 35, ref caption, 4); // caption color (Win11)
             }
             catch { }
@@ -81,6 +81,8 @@ namespace Fizz
         public bool Selected;     // nav buttons: accent bar + highlight
         public bool NavStyle;
         public Color HoverColor = Theme.Hover;
+        public string Glyph;          // optional Segoe Fluent Icons glyph (nav buttons, arrow buttons)
+        Font glyphFont;
 
         public RoundButton()
         {
@@ -102,16 +104,35 @@ namespace Fizz
             using (var bg = new SolidBrush(Parent != null ? Parent.BackColor : Theme.Bg)) g.FillRectangle(bg, ClientRectangle);
             var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
             float rad = Height * 0.28f;
-            Color fill = NavStyle ? (Selected ? Theme.Selected : hover ? Theme.Hover : Theme.Panel)
+            Color navBg = Parent != null ? Parent.BackColor : Theme.Nav;
+            Color fill = NavStyle ? (Selected ? Color.FromArgb(45, 45, 45) : hover ? Color.FromArgb(36, 36, 36) : navBg)
                                   : (down ? Theme.Selected : hover ? HoverColor : BackColor);
+            if (NavStyle) rad = Height * 0.18f;
             Ui.Fill(g, r, fill, rad);
-            if (!NavStyle) Ui.Stroke(g, r, Color.FromArgb(hover ? 90 : 60, 255, 255, 255), rad);
+            if (!NavStyle) Ui.Stroke(g, r, Color.FromArgb(hover ? 70 : 38, 255, 255, 255), rad);
             if (NavStyle && Selected)
-                Ui.Fill(g, new RectangleF(3, Height * 0.25f, 3, Height * 0.5f), Theme.Accent, 1.5f);
-            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | (NavStyle ? TextFormatFlags.Left : TextFormatFlags.HorizontalCenter);
-            var tr = NavStyle ? new Rectangle((int)(Height * 0.5f), 0, Width - (int)(Height * 0.5f), Height) : ClientRectangle;
+                Ui.Fill(g, new RectangleF(2, Height * 0.3f, 3, Height * 0.4f), Theme.Accent, 1.5f);
             Color fg = !Enabled ? Theme.Dim : NavStyle && Selected ? Theme.Text : ForeColor;
+            int textX = NavStyle ? (int)(Height * 0.42f) : 0;
+            if (!string.IsNullOrEmpty(Glyph))
+            {
+                float gs = Math.Max(8f, Font.SizeInPoints * (NavStyle ? 1.1f : 1f));
+                if (glyphFont == null || Math.Abs(glyphFont.SizeInPoints - gs) > 0.01f) { if (glyphFont != null) glyphFont.Dispose(); glyphFont = new Font(Theme.IconFont, gs); }
+                var gr = NavStyle ? new Rectangle(textX, 0, (int)(Height * 0.6f), Height) : string.IsNullOrEmpty(Text) ? ClientRectangle : new Rectangle(0, 0, Height, Height);
+                Color gc = !Enabled ? Theme.Dim : NavStyle && Selected ? Theme.Accent : fg;
+                TextRenderer.DrawText(g, Glyph, glyphFont, gr, gc, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                if (NavStyle) textX += (int)(Height * 0.6f) + (int)(Height * 0.2f);
+            }
+            if (string.IsNullOrEmpty(Text)) return;
+            var flags = TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix | (NavStyle ? TextFormatFlags.Left : TextFormatFlags.HorizontalCenter);
+            var tr = NavStyle ? new Rectangle(textX, 0, Width - textX, Height) : ClientRectangle;
             TextRenderer.DrawText(g, Text, Font, tr, fg, flags);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && glyphFont != null) { glyphFont.Dispose(); glyphFont = null; }
+            base.Dispose(disposing);
         }
     }
 
@@ -221,6 +242,60 @@ namespace Fizz
 
 namespace Fizz
 {
+    /// <summary>Row of round colour swatches (the family accents). Replaces Windows' square colour dialog.</summary>
+    internal sealed class SwatchRow : Control
+    {
+        Color value = Theme.Accent;
+        int hover = -1;
+        public event EventHandler Picked;
+
+        public SwatchRow()
+        {
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+            Cursor = Cursors.Hand;
+        }
+
+        public Color Value
+        {
+            get { return value; }
+            set { this.value = Color.FromArgb(255, value.R, value.G, value.B); Invalidate(); }
+        }
+
+        float Step { get { return Height * 1.18f; } }
+
+        int IndexAt(Point p)
+        {
+            int i = (int)(p.X / Step);
+            return i >= 0 && i < Theme.Swatches.Length && p.X - i * Step <= Height ? i : -1;
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e) { int i = IndexAt(e.Location); if (i != hover) { hover = i; Invalidate(); } base.OnMouseMove(e); }
+        protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
+        protected override void OnMouseClick(MouseEventArgs e)
+        {
+            int i = IndexAt(e.Location);
+            if (i >= 0) { Value = Theme.Swatches[i]; var h = Picked; if (h != null) h(this, EventArgs.Empty); }
+            base.OnMouseClick(e);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var bg = new SolidBrush(Parent != null ? Parent.BackColor : Theme.Bg)) g.FillRectangle(bg, ClientRectangle);
+            float d = Height;
+            for (int i = 0; i < Theme.Swatches.Length; i++)
+            {
+                var c = Theme.Swatches[i];
+                bool on = c.ToArgb() == value.ToArgb();
+                float x = i * Step;
+                float inset = on ? d * 0.2f : hover == i ? d * 0.06f : d * 0.12f;
+                using (var b = new SolidBrush(c)) g.FillEllipse(b, x + inset, inset, d - 2 * inset, d - 2 * inset);
+                if (on) using (var p = new Pen(c, Math.Max(1.5f, d * 0.07f))) g.DrawEllipse(p, x + d * 0.05f, d * 0.05f, d * 0.9f, d * 0.9f);
+            }
+        }
+    }
+
     /// <summary>Rounded card panel that hosts inputs/lists (paints its own rounded background).</summary>
     internal class RoundHost : Panel
     {
@@ -342,7 +417,7 @@ namespace Fizz
         {
             base.OnClick(e);
             if (!Enabled || Items.Count == 0) return;
-            var m = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), ShowImageMargin = false, ShowCheckMargin = true, Font = Font };
+            var m = new ContextMenuStrip { Renderer = new DarkMenuRenderer(), ShowImageMargin = false, ShowCheckMargin = true, Font = Font, Padding = new Padding(0, 4, 0, 4) };
             for (int i = 0; i < Items.Count; i++)
             {
                 int k = i;
