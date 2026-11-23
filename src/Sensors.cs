@@ -24,6 +24,8 @@ namespace Fizz
     /// </summary>
     internal sealed class SensorService : IDisposable
     {
+        public const string SensorFilesMissing = "sensor files are missing, so temperatures and load are off (keep Fizz.exe in its folder with the DLLs)";
+
         LhmBackend lhm;
         bool lhmBroken;
         int consecutiveErrors;
@@ -66,7 +68,7 @@ namespace Fizz
                 {
                     lhmBroken = true;
                     lhm = null;
-                    Problem = "Sensor library missing or damaged: " + ex.Message;
+                    Problem = SensorFilesMissing; // the technical detail goes to fizz.log
                     Log.Error("Sensors.Load", ex);
                 }
             }
@@ -106,7 +108,7 @@ namespace Fizz
                 catch (Exception ex) when (ex is System.IO.FileNotFoundException || ex is TypeLoadException || ex is BadImageFormatException)
                 {
                     lhmBroken = true;
-                    Problem = "Sensor library missing or damaged: " + ex.Message;
+                    Problem = SensorFilesMissing; // the technical detail goes to fizz.log
                     Log.Error("Sensors.Open", ex);
                     return;
                 }

@@ -82,6 +82,8 @@ namespace Fizz
         public bool NavStyle;
         public Color HoverColor = Theme.Hover;
         public string Glyph;          // optional Segoe Fluent Icons glyph (nav buttons, arrow buttons)
+        public bool Flat;             // no outline or fill until hovered (the − / + inside number boxes)
+        public char Sign;             // '-' or '+': drawn as lines, exactly centred (font glyphs sit off-centre)
         Font glyphFont;
 
         public RoundButton()
@@ -108,11 +110,28 @@ namespace Fizz
             Color fill = NavStyle ? (Selected ? Color.FromArgb(45, 45, 45) : hover ? Color.FromArgb(36, 36, 36) : navBg)
                                   : (down ? Theme.Selected : hover ? HoverColor : BackColor);
             if (NavStyle) rad = Height * 0.18f;
-            Ui.Fill(g, r, fill, rad);
-            if (!NavStyle) Ui.Stroke(g, r, Color.FromArgb(hover ? 70 : 38, 255, 255, 255), rad);
+            if (Flat)
+            {
+                if (hover || down) Ui.Fill(g, new RectangleF(2, 2, Width - 4, Height - 4), down ? Theme.Selected : Theme.Hover, Math.Min(6, Height * 0.25f));
+            }
+            else
+            {
+                Ui.Fill(g, r, fill, rad);
+                if (!NavStyle) Ui.Stroke(g, r, Color.FromArgb(hover ? 70 : 38, 255, 255, 255), rad);
+            }
             if (NavStyle && Selected)
                 Ui.Fill(g, new RectangleF(2, Height * 0.3f, 3, Height * 0.4f), Theme.Accent, 1.5f);
             Color fg = !Enabled ? Theme.Dim : NavStyle && Selected ? Theme.Text : ForeColor;
+            if (Sign == '-' || Sign == '+')
+            {
+                float cx = Width / 2f, cy = Height / 2f, k = (float)Math.Round(Math.Max(4f, Height * 0.2f));
+                using (var p = new Pen(fg, Math.Max(1.5f, Height / 18f)) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                {
+                    g.DrawLine(p, cx - k, cy, cx + k, cy);
+                    if (Sign == '+') g.DrawLine(p, cx, cy - k, cx, cy + k);
+                }
+                return;
+            }
             int textX = NavStyle ? (int)(Height * 0.42f) : 0;
             if (!string.IsNullOrEmpty(Glyph))
             {
@@ -464,8 +483,9 @@ namespace Fizz
             box.BackColor = Theme.Card;
             box.ForeColor = Theme.Text;
             box.TextAlign = HorizontalAlignment.Center;
-            foreach (var b in new[] { minus, plus }) { b.BackColor = Theme.Card; b.ForeColor = Theme.Sub; b.TabStop = false; }
-            minus.Text = "−"; plus.Text = "+";
+            Edge = Color.FromArgb(78, 78, 78); // a clearer outline than other cards
+            foreach (var b in new[] { minus, plus }) { b.BackColor = Theme.Card; b.ForeColor = Theme.Text; b.TabStop = false; b.Flat = true; }
+            minus.Sign = '-'; plus.Sign = '+';
             minus.Click += (s, e) => Value -= inc;
             plus.Click += (s, e) => Value += inc;
             box.Leave += (s, e) => Commit();
@@ -517,9 +537,22 @@ namespace Fizz
         {
             base.OnLayout(e);
             int h = Height, bw = (int)(h * 0.9f);
-            minus.SetBounds(2, 2, bw, h - 4);
-            plus.SetBounds(Width - bw - 2, 2, bw, h - 4);
+            minus.SetBounds(1, 1, bw, h - 2);
+            plus.SetBounds(Width - bw - 1, 1, bw, h - 2);
             box.SetBounds(bw + 4, (h - box.PreferredHeight) / 2 + 1, Width - 2 * bw - 8, box.PreferredHeight);
+            Invalidate();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            // thin dividers between − | value | +
+            int bw = (int)(Height * 0.9f) + 1, inset = Math.Max(5, Height / 5);
+            using (var p = new Pen(Color.FromArgb(70, 70, 70)))
+            {
+                e.Graphics.DrawLine(p, bw, inset, bw, Height - inset - 1);
+                e.Graphics.DrawLine(p, Width - bw - 1, inset, Width - bw - 1, Height - inset - 1);
+            }
         }
     }
 }
