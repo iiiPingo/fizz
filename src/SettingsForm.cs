@@ -167,7 +167,7 @@ namespace Fizz
         Label fontVal, opacityVal, lookFor;
         CheckBox bgCheck;
         SwatchRow accentRow;
-        DarkCombo cornerBox, modeBox, rateBox;
+        DarkCombo cornerBox, modeBox, rateBox, screenBox, windowedBox;
         DarkNum marginBox;
         // games page
         DarkList gameList;
@@ -608,6 +608,14 @@ namespace Fizz
             Lbl(p, "Update rate", x, y + 4);
             rateBox = Combo(p, x2, y, S96(140), (s, e) => { S.SampleMs = new[] { 250, 500, 1000 }[rateBox.SelectedIndex]; Changed(); });
             rateBox.Items.AddRange(new object[] { "4x per second", "2x per second", "1x per second" });
+            y += S96(36);
+            Lbl(p, "Screen", x, y + 4);
+            screenBox = Combo(p, x2, y, S96(260), (s, e) => { S.Screen = screenBox.SelectedIndex == 1 ? "Main" : "Active"; Changed(); });
+            screenBox.Items.AddRange(new object[] { "Follow the window in front", "Main screen (when not in a game)" });
+            y += S96(36);
+            Lbl(p, "Windowed games", x, y + 4);
+            windowedBox = Combo(p, x2, y, S96(260), (s, e) => { S.PinInWindow = windowedBox.SelectedIndex == 0; Changed(); });
+            windowedBox.Items.AddRange(new object[] { "Inside the game window", "Corner of the screen" });
         }
 
         // ================= Games =================
@@ -816,6 +824,8 @@ namespace Fizz
                 cornerBox.SelectedIndex = Math.Max(0, Array.IndexOf(new[] { "TopLeft", "TopRight", "BottomLeft", "BottomRight" }, S.Corner));
                 marginBox.Value = Clamp(S.Margin, marginBox);
                 rateBox.SelectedIndex = S.SampleMs <= 250 ? 0 : S.SampleMs <= 500 ? 1 : 2;
+                screenBox.SelectedIndex = S.MainScreenOnly ? 1 : 0;
+                windowedBox.SelectedIndex = S.PinInWindow ? 0 : 1;
                 hkToggle.Text = S.HotkeyToggle; hkLayout.Text = S.HotkeyLayout; hkPreset.Text = S.HotkeyPreset;
                 hkProblem.Text = app.HotkeyProblem ?? "";
                 startWin.Checked = S.StartWithWindows;

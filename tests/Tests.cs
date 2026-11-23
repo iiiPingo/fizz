@@ -246,6 +246,8 @@ namespace Fizz.Tests
         {
             var s = FizzSettings.CreateDefault();
             Ok(s.Presets.Count == 3 && s.Active.Name == "Full", "default presets");
+            Ok(s.Presets.TrueForAll(p => p.Vertical), "new presets are vertical");
+            Ok(s.Screen == "Active" && !s.MainScreenOnly && s.PinInWindow, "placement defaults unchanged (follow window, inside windowed games)");
             Ok(s.Active.Items.Count == Stats.All.Length, "every stat present in preset");
             Ok(s.Threshold(Stat.GpuTemp).Amber == 75 && s.Threshold(Stat.GpuTemp).Red == 85, "gpu temp thresholds 75/85");
             Ok(s.IsNotGame("chrome.exe") && s.IsNotGame("CHROME.EXE") && !s.IsNotGame("eldenring.exe"), "browsers aren't games");
@@ -262,6 +264,11 @@ namespace Fizz.Tests
             Ok(junk.SampleMs == 250, "sample rate snapped");
             Ok(junk.HotkeyToggle == "Ctrl+Alt+F", "missing fields get defaults");
             Ok(junk.Thresholds.Count > 5, "thresholds filled");
+            Ok(junk.Screen == "Active" && junk.PinInWindow, "older settings files get the placement defaults");
+            var placed = FizzSettings.FromJson("{\"Screen\":\"Main\",\"PinInWindow\":false,\"Presets\":[{\"Name\":\"H\",\"Layout\":\"Horizontal\"}]}");
+            Ok(placed.MainScreenOnly && !placed.PinInWindow, "placement options load");
+            Ok(!placed.Active.Vertical, "a saved horizontal preset stays horizontal");
+            Ok(FizzSettings.FromJson("{\"Screen\":\"Moon\"}").Screen == "Active", "bad screen value repaired");
 
             Ok(s.Version == 2 && s.IsNotGame("SnippingTool.exe") && s.IsNotGame("steamwebhelper.exe"), "fresh settings include v2 non-games");
             var old = FizzSettings.FromJson("{\"Version\":1,\"FirstRunDone\":true,\"NotGames\":[\"chrome.exe\",\"mygame-launcher.exe\"]}");

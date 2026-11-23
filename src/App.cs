@@ -425,8 +425,7 @@ namespace Fizz
             bool overGame = false;
             if (!gameInFront && gamePid != 0 && gameHwnd != IntPtr.Zero && Native.IsWindow(gameHwnd) && Native.IsWindowVisible(gameHwnd) && !Native.IsIconic(gameHwnd))
             {
-                Native.RECT gameArea;
-                if (!Native.ClientRectOnScreen(gameHwnd, out gameArea)) Native.GetWindowRect(gameHwnd, out gameArea);
+                var gameArea = GameAnchor(gameHwnd);
                 var onGame = overlay.BoundsPinnedTo(gameArea, Settings.Corner, Settings.Margin);
                 overGame = StaysOnGame(fg.WindowRect, fg.IsDesktop, fg.IsMinimized, onGame);
                 if (overGame) lastGameFrontTicks = now;
@@ -475,15 +474,14 @@ namespace Fizz
                 lock (snapGate) ui.CopyFrom(sampled);
                 ui.Game = GameLabel(gamePid != 0 ? gameExe : fg.Exe);
                 BuildContent(preset, now);
-                IntPtr mon = fg.Monitor;
+                IntPtr mon = Settings.MainScreenOnly ? PrimaryMonitor() : fg.Monitor;
                 var anchor = new Native.RECT(); // empty = whole monitor
                 if (gameShown)
                 {
                     mon = Native.MonitorFromWindow(gameHwnd, Native.MONITOR_DEFAULTTONEAREST);
-                    Native.RECT cr;
-                    if (Native.ClientRectOnScreen(gameHwnd, out cr)) anchor = cr; // windowed: pin inside the game window
+                    anchor = GameAnchor(gameHwnd);
                 }
-                else if (preview && fg.IsOwn) mon = Native.MonitorFromWindow(settingsForm.Handle, Native.MONITOR_DEFAULTTONEAREST);
+                else if (preview && fg.IsOwn && !Settings.MainScreenOnly) mon = Native.MonitorFromWindow(settingsForm.Handle, Native.MONITOR_DEFAULTTONEAREST);
                 overlay.Render(content, mon, anchor);
             }
             else overlay.HideOverlay();
@@ -496,6 +494,21 @@ namespace Fizz
                 tray.Text = t.Length > 63 ? t.Substring(0, 63) : t;
             }
             if ((DateTime.UtcNow - lastStatusUtc).TotalSeconds >= 60) { lastStatusUtc = DateTime.UtcNow; WriteStatus(); }
+        }
+
+        static IntPtr PrimaryMonitor() { return Native.MonitorFromPoint(new Native.POINT(0, 0), Native.MONITOR_DEFAULTTOPRIMARY); }
+
+        /// <summary>
+        /// The area the overlay is pinned into while a game shows: inside the game window (windowed games), or the
+        /// corner of the game's screen when "inside windowed games" is off. Borderless games fill the screen either way.
+        /// </summary>
+        Native.RECT GameAnchor(IntPtr hwnd)
+        {
+            Native.RECT r;
+            if (Settings.PinInWindow && Native.ClientRectOnScreen(hwnd, out r)) return r;
+            var mi = new Native.MONITORINFO { cbSize = 40 };
+            Native.GetMonitorInfo(Native.MonitorFromWindow(hwnd, Native.MONITOR_DEFAULTTONEAREST), ref mi);
+            return mi.rcMonitor;
         }
 
         /// <summary>
@@ -770,6 +783,9 @@ namespace Fizz
                 string corner = c;
                 pos.DropDownItems.Add(Check(CornerName(c), Settings.Corner == c, () => { Settings.Corner = corner; SettingsChanged(); }));
             }
+            pos.DropDownItems.Add(new ToolStripSeparator());
+            pos.DropDownItems.Add(Check("Main screen when not in a game", Settings.MainScreenOnly, () => { Settings.Screen = Settings.MainScreenOnly ? "Active" : "Main"; SettingsChanged(); }));
+            pos.DropDownItems.Add(Check("Inside windowed games", Settings.PinInWindow, () => { Settings.PinInWindow = !Settings.PinInWindow; SettingsChanged(); }));
             menu.Items.Add(pos);
 
             if (!string.IsNullOrEmpty(lastGameExe))

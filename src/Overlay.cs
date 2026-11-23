@@ -194,15 +194,15 @@ namespace Fizz
 
         static FontFamily overlayFamily;
 
-        /// <summary>Segoe UI Variable Display Semibold (Windows 11), the same family as the other Pingo apps. Segoe UI Semibold on Windows 10.</summary>
+        /// <summary>Bahnschrift SemiBold (ships with Windows 10/11): tabular digits, compact HUD look. Falls back to Segoe UI.</summary>
         static FontFamily OverlayFamily
         {
             get
             {
                 if (overlayFamily != null) return overlayFamily;
-                foreach (var name in new[] { "Segoe UI Variable Display Semibold", "Segoe UI Semibold", "Segoe UI" })
+                foreach (var name in new[] { "Bahnschrift SemiBold", "Bahnschrift", "Segoe UI Semibold", "Segoe UI" })
                 {
-                    try { overlayFamily = new FontFamily(name); break; } catch (ArgumentException) { } // GDI+ throws for a missing font
+                    try { overlayFamily = new FontFamily(name); break; } catch (ArgumentException) { }
                 }
                 return overlayFamily ?? (overlayFamily = FontFamily.GenericSansSerif);
             }
@@ -219,7 +219,7 @@ namespace Fizz
             float valuePx = px * 96f / 72f;
             var fam = OverlayFamily;
             valueFont = new Font(fam, valuePx, FontStyle.Regular, GraphicsUnit.Pixel);
-            labelFont = new Font(fam, valuePx * 0.8f, FontStyle.Regular, GraphicsUnit.Pixel); // labels (FPS, GPU...) smaller, like tags
+            labelFont = new Font(fam, valuePx * 0.9f, FontStyle.Regular, GraphicsUnit.Pixel);
             float em = fam.GetEmHeight(FontStyle.Regular), asc = fam.GetCellAscent(FontStyle.Regular);
             valueAscent = valueFont.Size * asc / em;
             labelAscent = labelFont.Size * asc / em;
@@ -296,7 +296,7 @@ namespace Fizz
         Size Draw(OverlayContent c, float scale)
         {
             if (g == null) EnsureSurface(64, 32);
-            float pad = 10 * scale, padV = 5 * scale, gapLV = 6 * scale, gapVV = 9 * scale, gapG = 16 * scale, rowGap = 1 * scale;
+            float pad = 8 * scale, padV = 4 * scale, gapLV = 6 * scale, gapVV = 9 * scale, gapG = 14 * scale, rowGap = 1 * scale;
             float lineH = valueFont.GetHeight(g) * 0.98f;
             float labelLift = valueAscent - labelAscent; // labels share the values' baseline
 
@@ -346,8 +346,8 @@ namespace Fizz
             g.CompositingMode = CompositingMode.SourceOver;
             if (c.Background)
             {
-                float radius = c.Vertical ? 10 * scale : ih / 2f;
-                Color edgeColor = Color.FromArgb(70, c.Accent);
+                float radius = c.Vertical ? 8 * scale : ih / 2f;
+                Color edgeColor = Color.FromArgb(60, c.Accent);
                 float edgeW = Math.Max(1f, scale);
                 if (edgePen == null || edgePen.Color != edgeColor || edgePen.Width != edgeW)
                 {

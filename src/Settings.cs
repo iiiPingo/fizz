@@ -22,7 +22,7 @@ namespace Fizz
     internal sealed class Preset
     {
         [DataMember(Order = 1)] public string Name;
-        [DataMember(Order = 2)] public string Layout = "Horizontal";   // Horizontal | Vertical
+        [DataMember(Order = 2)] public string Layout = "Vertical";     // Vertical (default) | Horizontal
         [DataMember(Order = 3)] public float FontSize = 10.5f;          // points at 100% scaling
         [DataMember(Order = 4)] public int Opacity = 95;                // whole overlay, 20..100 %
         [DataMember(Order = 5)] public bool Background = true;
@@ -88,6 +88,8 @@ namespace Fizz
         [DataMember(Order = 17)] public bool FirstRunDone;
         [DataMember(Order = 18)] public bool SessionSummary = true;
         [DataMember(Order = 19)] public bool CsvLog;
+        [DataMember(Order = 20)] public string Screen = "Active";     // Active (screen of the window in front) | Main (always the main screen)
+        [DataMember(Order = 21)] public bool PinInWindow = true;      // windowed games: true = inside the game window, false = screen corner
 
         [OnDeserializing]
         void OnDeserializing(StreamingContext c) { ApplyFieldDefaults(); }
@@ -99,12 +101,13 @@ namespace Fizz
             Presets = new List<Preset>(); Thresholds = new List<ThresholdSetting>(); Games = new List<GameRule>();
             NotGames = new List<string>(); CpuTempSensor = new SensorPick(); GpuTempSensor = new SensorPick();
             StartWithWindows = true; SampleMs = 500; HotkeyToggle = "Ctrl+Alt+F"; HotkeyLayout = "Ctrl+Alt+L"; HotkeyPreset = "Ctrl+Alt+P";
-            SessionSummary = true;
+            SessionSummary = true; Screen = "Active"; PinInWindow = true;
         }
 
         // ---------- helpers ----------
 
         public bool AlwaysShow { get { return string.Equals(Mode, "Always", StringComparison.OrdinalIgnoreCase); } }
+        public bool MainScreenOnly { get { return string.Equals(Screen, "Main", StringComparison.OrdinalIgnoreCase); } }
 
         public Preset FindPreset(string name)
         {
@@ -222,7 +225,7 @@ namespace Fizz
                 foreach (var d in Stats.All) if (!seen.Contains(d.Key)) p.Items.Add(NewItem(d.Id, false));
                 if (p.FontSize < 7 || p.FontSize > 28 || float.IsNaN(p.FontSize)) p.FontSize = 10.5f;
                 p.Opacity = Math.Max(20, Math.Min(100, p.Opacity));
-                if (p.Layout != "Vertical") p.Layout = "Horizontal";
+                if (p.Layout != "Horizontal") p.Layout = "Vertical";
                 System.Drawing.Color c;
                 if (!TryColor(p.Accent, out c)) p.Accent = "#FF5C9E";
             }
@@ -236,6 +239,7 @@ namespace Fizz
             }
 
             if (Mode != "Always") Mode = "Auto";
+            if (Screen != "Main") Screen = "Active";
             if (Corner != "TopRight" && Corner != "BottomLeft" && Corner != "BottomRight") Corner = "TopLeft";
             Margin = Math.Max(0, Math.Min(200, Margin));
             SampleMs = SampleMs <= 300 ? 250 : SampleMs <= 750 ? 500 : 1000;
