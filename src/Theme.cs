@@ -48,9 +48,18 @@ namespace Fizz
             : FontExists("Segoe UI Semibold") ? "Segoe UI Semibold" : null;
         static readonly string UiDisplaySemi = FontExists("Segoe UI Variable Display Semibold") ? "Segoe UI Variable Display Semibold" : null;
         public static readonly string IconFont = FontExists("Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets";
-        public static Font Ui(float size) { return new Font(UiFamily, size); }
-        public static Font UiSemi(float size) { return UiSemiFamily != null ? new Font(UiSemiFamily, size) : new Font(UiFamily, size, FontStyle.Bold); }
-        public static Font UiTitle(float size) { return UiDisplaySemi != null ? new Font(UiDisplaySemi, size) : UiSemi(size); }
+        // the app window and tray menu use Outfit (built into Fizz.exe); Segoe UI if it couldn't be loaded. The overlay keeps its own font.
+        public static Font Ui(float size) { return AppFonts.Regular != null ? new Font(AppFonts.Regular, size) : new Font(UiFamily, size); }
+        public static Font UiSemi(float size)
+        {
+            if (AppFonts.SemiBold != null) return new Font(AppFonts.SemiBold, size);
+            return UiSemiFamily != null ? new Font(UiSemiFamily, size) : new Font(UiFamily, size, FontStyle.Bold);
+        }
+        public static Font UiTitle(float size)
+        {
+            if (AppFonts.SemiBold != null) return new Font(AppFonts.SemiBold, size);
+            return UiDisplaySemi != null ? new Font(UiDisplaySemi, size) : UiSemi(size);
+        }
 
         // Segoe Fluent Icons / MDL2 glyphs
         public const string GStats = "\uE9D9", GLook = "\uE790", GGames = "\uE7FC", GAdvanced = "\uE713", GUp = "\uE70E", GDown = "\uE70D", GCheck = "\uE73E";
@@ -78,6 +87,54 @@ namespace Fizz
                     return s == null ? SystemIcons.Application : new Icon(s, size, size);
             }
             catch { return SystemIcons.Application; }
+        }
+    }
+
+    /// <summary>
+    /// Outfit (SIL Open Font License, src/fonts) loaded from the exe's resources, without installing it.
+    /// GDI+ needs it in a PrivateFontCollection (Font objects); GDI needs AddFontMemResourceEx (TextRenderer, menus).
+    /// If either half fails on Windows, both families stay null and Fizz uses Segoe UI.
+    /// </summary>
+    internal static class AppFonts
+    {
+        public static readonly FontFamily Regular, SemiBold;
+        // one collection per file, so each weight is found by its file, not by a family name that differs between systems
+        static readonly System.Drawing.Text.PrivateFontCollection[] pfc = { new System.Drawing.Text.PrivateFontCollection(), new System.Drawing.Text.PrivateFontCollection() };
+
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] static extern IntPtr AddFontMemResourceEx(IntPtr pb, uint cb, IntPtr pdv, ref uint pcFonts);
+
+        static AppFonts()
+        {
+            try
+            {
+                bool windows = Environment.OSVersion.Platform == PlatformID.Win32NT;
+                var names = new[] { "Fizz.Outfit-Regular.ttf", "Fizz.Outfit-SemiBold.ttf" };
+                for (int i = 0; i < names.Length; i++)
+                {
+                    string name = names[i];
+                    byte[] data;
+                    using (var s = typeof(AppFonts).Assembly.GetManifestResourceStream(name))
+                    {
+                        if (s == null) return;
+                        data = new byte[s.Length];
+                        int read = 0;
+                        while (read < data.Length) { int n = s.Read(data, read, data.Length - read); if (n <= 0) break; read += n; }
+                    }
+                    // the memory stays allocated for the life of the process (both GDI and GDI+ read from it)
+                    IntPtr mem = System.Runtime.InteropServices.Marshal.AllocCoTaskMem(data.Length);
+                    System.Runtime.InteropServices.Marshal.Copy(data, 0, mem, data.Length);
+                    pfc[i].AddMemoryFont(mem, data.Length);
+                    if (windows)
+                    {
+                        uint count = 0;
+                        if (AddFontMemResourceEx(mem, (uint)data.Length, IntPtr.Zero, ref count) == IntPtr.Zero) { Log.Warn("Outfit font: AddFontMemResourceEx failed"); return; }
+                    }
+                }
+                if (pfc[0].Families.Length == 0 || pfc[1].Families.Length == 0) { Log.Warn("Outfit font: not loaded"); return; }
+                Regular = pfc[0].Families[0];
+                SemiBold = pfc[1].Families[0];
+            }
+            catch (Exception ex) { Regular = SemiBold = null; Log.Error("Outfit font", ex); }
         }
     }
 

@@ -352,6 +352,9 @@ namespace Fizz.Tests
             Ok(apps[0].Exe == "Discord.exe" && apps[1].Exe == "x.exe" && apps[2].Exe == "eldenring.exe", "sorted by title");
             Ok(apps[1].Title.Length == 48 && apps[1].Title.EndsWith("…"), "long titles shortened");
 
+            Ok(AppFonts.Regular != null && AppFonts.Regular.Name == "Outfit", "Outfit regular loads from the exe");
+            Ok(AppFonts.SemiBold != null && AppFonts.SemiBold.Name.StartsWith("Outfit"), "Outfit semibold loads from the exe");
+            using (var f = Theme.Ui(10f)) Ok(f.Name == "Outfit", "window font is Outfit (" + f.Name + ")");
             Ok(FizzSettings.FromJson("{\"SampleMs\":333}").SampleMs == 333, "3x per second kept");
             Ok(FizzSettings.FromJson("{\"SampleMs\":350}").SampleMs == 333, "near 3x snaps to 3x");
             Ok(FizzSettings.FromJson("{\"SampleMs\":500}").SampleMs == 500 && FizzSettings.FromJson("{\"SampleMs\":250}").SampleMs == 250, "2x and 4x unchanged");

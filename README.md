@@ -26,7 +26,7 @@ Exclusive fullscreen can't be drawn over by anything that isn't injected, so run
 - Update rate has a new **3x per second** option.
 - New presets start vertical. Ctrl+Alt+L still switches.
 - New on the Look page (and the tray's Position menu): **Screen** keeps the overlay on your main screen when you're not in a game, and **Windowed games** keeps it in the screen corner instead of inside the game window. Either one stops it moving around.
-- New look for the settings window and tray menu to match the other Pingo apps: Segoe UI Variable font, icons in the side menu, Windows 11 rounded menus with ticks instead of square check boxes. The overlay itself looks the same as before.
+- New look for the settings window and tray menu: the Outfit font (built into Fizz, nothing to install), icons in the side menu, Windows 11 rounded menus with ticks instead of square check boxes. The overlay itself looks the same as before.
 - Accent colour is now a row of colour dots (the same colours as the other apps) instead of the old Windows colour box.
 - Questions like "Delete preset?" now use a dark box instead of the white Windows one.
 
@@ -37,6 +37,7 @@ Exclusive fullscreen can't be drawn over by anything that isn't injected, so run
 - [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) 0.9.6 (MPL-2.0), DLLs in `lib/lhm096`
 - [PresentMon](https://github.com/GameTechDev/PresentMon) 2.6.0 (MIT), bundled in the release under `tools/`
 - [PawnIO](https://pawnio.eu) (GPL-2.0 driver, installed separately)
+- [Outfit](https://github.com/Outfitio/Outfit-Fonts) font (SIL Open Font License 1.1), in `src/fonts`, used for the settings window
 
 ## License
 MIT for Fizz's own code. Third-party components keep their own licenses.
