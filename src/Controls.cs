@@ -261,11 +261,15 @@ namespace Fizz
 
 namespace Fizz
 {
-    /// <summary>Row of round colour swatches (the family accents). Replaces Windows' square colour dialog.</summary>
+    /// <summary>
+    /// Accent picker, same as Minibar's: the family colours plus a last circle that opens a custom colour
+    /// (shows "+" until a custom colour is picked, then that colour).
+    /// </summary>
     internal sealed class SwatchRow : Control
     {
         Color value = Theme.Accent;
         int hover = -1;
+        Font iconFont;
         public event EventHandler Picked;
 
         public SwatchRow()
@@ -280,38 +284,67 @@ namespace Fizz
             set { this.value = Color.FromArgb(255, value.R, value.G, value.B); Invalidate(); }
         }
 
-        float Step { get { return Height * 1.18f; } }
+        int Count { get { return Theme.Swatches.Length + 1; } }
+        int CustomIndex { get { return Theme.Swatches.Length; } }
+        bool IsPreset { get { return Array.Exists(Theme.Swatches, p => p.ToArgb() == value.ToArgb()); } }
+        Rectangle Cell(int i) { return new Rectangle(i * Height, 0, Height, Height); }
+        int Hit(Point p) { for (int i = 0; i < Count; i++) if (Cell(i).Contains(p)) return i; return -1; }
 
-        int IndexAt(Point p)
-        {
-            int i = (int)(p.X / Step);
-            return i >= 0 && i < Theme.Swatches.Length && p.X - i * Step <= Height ? i : -1;
-        }
+        /// <summary>Width that fits every circle at the current height.</summary>
+        public int PreferredWidth { get { return Count * Height; } }
 
-        protected override void OnMouseMove(MouseEventArgs e) { int i = IndexAt(e.Location); if (i != hover) { hover = i; Invalidate(); } base.OnMouseMove(e); }
-        protected override void OnMouseLeave(EventArgs e) { hover = -1; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnMouseClick(MouseEventArgs e)
+        static void Disc(Graphics g, PointF c, float r, Color col)
         {
-            int i = IndexAt(e.Location);
-            if (i >= 0) { Value = Theme.Swatches[i]; var h = Picked; if (h != null) h(this, EventArgs.Empty); }
-            base.OnMouseClick(e);
+            using (var b = new SolidBrush(col)) g.FillEllipse(b, c.X - r, c.Y - r, 2 * r, 2 * r);
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            using (var bg = new SolidBrush(Parent != null ? Parent.BackColor : Theme.Bg)) g.FillRectangle(bg, ClientRectangle);
-            float d = Height;
-            for (int i = 0; i < Theme.Swatches.Length; i++)
+            Color bg = Parent != null ? Parent.BackColor : Theme.Bg;
+            using (var b = new SolidBrush(bg)) g.FillRectangle(b, ClientRectangle);
+            float k = Height / 36f;
+            for (int i = 0; i < Count; i++)
             {
-                var c = Theme.Swatches[i];
-                bool on = c.ToArgb() == value.ToArgb();
-                float x = i * Step;
-                float inset = on ? d * 0.2f : hover == i ? d * 0.06f : d * 0.12f;
-                using (var b = new SolidBrush(c)) g.FillEllipse(b, x + inset, inset, d - 2 * inset, d - 2 * inset);
-                if (on) using (var p = new Pen(c, Math.Max(1.5f, d * 0.07f))) g.DrawEllipse(p, x + d * 0.05f, d * 0.05f, d * 0.9f, d * 0.9f);
+                var c = Cell(i);
+                var center = new PointF(c.X + c.Width / 2f, c.Y + c.Height / 2f);
+                bool custom = i == CustomIndex;
+                Color col = custom ? (IsPreset ? Theme.Card : value) : Theme.Swatches[i];
+                bool sel = custom ? !IsPreset : Theme.Swatches[i].ToArgb() == value.ToArgb();
+                if (sel || i == hover) Disc(g, center, 15 * k, sel ? Theme.Text : Theme.Border);
+                Disc(g, center, 13 * k, bg);
+                Disc(g, center, 11 * k, col);
+                if (custom && IsPreset)
+                {
+                    if (iconFont == null) iconFont = new Font(Theme.IconFont, 10f * k);
+                    TextRenderer.DrawText(g, "\uE710", iconFont, c, Theme.Sub, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding); // Add
+                }
             }
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); int h = Hit(e.Location); if (h != hover) { hover = h; Invalidate(); } }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -1; Invalidate(); }
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            base.OnMouseUp(e);
+            int h = Hit(e.Location);
+            if (h < 0 || e.Button != MouseButtons.Left) return;
+            if (h < CustomIndex) { Value = Theme.Swatches[h]; Fire(); return; }
+            using (var dlg = new ColorDialog { Color = value, FullOpen = true, AnyColor = true })
+            {
+                if (dlg.ShowDialog(FindForm()) != DialogResult.OK) return;
+                Value = dlg.Color;
+                Fire();
+            }
+        }
+
+        void Fire() { var p = Picked; if (p != null) p(this, EventArgs.Empty); }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && iconFont != null) { iconFont.Dispose(); iconFont = null; }
+            base.Dispose(disposing);
         }
     }
 

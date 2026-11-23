@@ -588,8 +588,8 @@ namespace Fizz
 
             y += S96(36);
             Lbl(p, "Accent color", x, y + 5);
-            int sw = S96(24);
-            accentRow = new SwatchRow { Bounds = new Rectangle(x2, y + S96(3), (int)Math.Ceiling(sw * 1.18f * (Theme.Swatches.Length - 1)) + sw + 2, sw), BackColor = Theme.Bg };
+            accentRow = new SwatchRow { Location = new Point(x2 - S96(6), y - S96(6)), Height = S96(36), BackColor = Theme.Bg };
+            accentRow.Width = accentRow.PreferredWidth;
             accentRow.Picked += (s, e) => { EditingPreset.Accent = Theme.Hex(accentRow.Value); Changed(); };
             p.Controls.Add(accentRow);
 

@@ -27,7 +27,7 @@ Exclusive fullscreen can't be drawn over by anything that isn't injected, so run
 - New presets start vertical. Ctrl+Alt+L still switches.
 - New on the Look page (and the tray's Position menu): **Screen** keeps the overlay on your main screen when you're not in a game, and **Windowed games** keeps it in the screen corner instead of inside the game window. Either one stops it moving around.
 - New look for the settings window and tray menu: the Outfit font (built into Fizz, nothing to install), icons in the side menu, Windows 11 rounded menus with ticks instead of square check boxes. The overlay itself looks the same as before.
-- Accent colour is now a row of colour dots (the same colours as the other apps) instead of the old Windows colour box.
+- Accent colour picker works like Minibar's: the family colour dots, plus a **+** circle for any custom colour.
 - Questions like "Delete preset?" now use a dark box instead of the white Windows one.
 
 ## Build
