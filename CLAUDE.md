@@ -4,8 +4,9 @@ Minimal in-game performance overlay for Windows (FPS, temps, load, RAM, VRAM) th
 
 ## Build and test
 - `./build.sh` builds `out/Fizz.exe` with Mono's `mcs` against the .NET Framework 4.8 reference assemblies and the LibreHardwareMonitor DLLs in `lib/lhm096`. Unit tests are in `tests/Tests.cs`.
-- The version is set in `build.sh` (the last argument of `tools/make_res.py`, e.g. `1.1.1.0`), which writes the VS_VERSIONINFO resource. Bump it every release. Minibar compares it with the GitHub tag.
+- The version is set in `build.sh` (the last argument of `tools/make_res.py`, e.g. `1.2.0.0`), which writes the VS_VERSIONINFO resource. Bump it every release. Minibar compares it with the GitHub tag.
 - Tray icon comes from `tools/make_icon.py` into `src/fizz-tray.ico`.
+- Outfit (SIL Open Font License, `src/fonts/OFL.txt`) is built into `Fizz.exe` by the `-resource` lines in `build.sh` and loaded at startup in `Theme.cs`. Nothing is installed on the PC. The app window and tray menu use it with Segoe UI as the fallback; the overlay keeps its own font.
 - Release zip: `Fizz-x.y.z.zip` with `Fizz/Fizz.exe`, `Fizz.exe.config`, the LHM DLLs, `tools/PresentMon`, and the PawnIO setup.
 
 ## Gotchas
@@ -13,6 +14,7 @@ Minimal in-game performance overlay for Windows (FPS, temps, load, RAM, VRAM) th
 - `Fizz.exe --exit` closes it cleanly: the launcher posts the message `Fizz.Exit` to the message-only hub, which accepts it from non-admin processes (ChangeWindowMessageFilterEx). Stop must not need a UAC prompt. A watchdog restarts Fizz after a crash, so a clean close has to go through `--exit`, not a kill.
 - CPU temperature needs the PawnIO driver (installed separately). Some anti-cheats (e.g. FACEIT) may block that driver. Minibar's Fizz card shows this notice.
 - Exclusive fullscreen can't be drawn over without injection. Games must run borderless.
+- With "Always on", the overlay position is checked against the game window. Alt-tabbing away from a windowed game used to make it bounce back and forth; a test in `tests/Tests.cs` covers it, so keep it passing.
 - Never add game-injection or hooking.
 
 ## Releasing
