@@ -40,4 +40,4 @@ Exclusive fullscreen can't be drawn over by anything that isn't injected, so run
 - [Outfit](https://github.com/Outfitio/Outfit-Fonts) font (SIL Open Font License 1.1), in `src/fonts`, used for the settings window
 
 ## License
-MIT for Fizz's own code. Third-party components keep their own licenses.
+PolyForm Noncommercial License 1.0.0: free to use, copy and change for non-commercial purposes, not for selling or other commercial use. See `LICENSE`. This covers Fizz's own code; third-party components keep their own licenses.
