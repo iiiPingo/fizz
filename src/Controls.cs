@@ -34,15 +34,20 @@ namespace Fizz
 
         [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
 
-        /// <summary>Dark title bar + rounded corners on Windows 11 (ignored on older builds).</summary>
+        /// <summary>Title bar that follows the theme (dark caption buttons on Dark / OLED, light on Light), Windows 11 caption colour.</summary>
         public static void DarkTitleBar(Form f)
         {
             try
             {
-                int on = 1;
+                int on = Theme.IsLight ? 0 : 1;
                 if (DwmSetWindowAttribute(f.Handle, 20, ref on, 4) != 0) DwmSetWindowAttribute(f.Handle, 19, ref on, 4);
-                int caption = ColorTranslator.ToWin32(Theme.Nav);
-                DwmSetWindowAttribute(f.Handle, 35, ref caption, 4); // caption color (Win11)
+                int caption = Theme.ColorRef(Theme.Nav);
+                DwmSetWindowAttribute(f.Handle, 35, ref caption, 4); // DWMWA_CAPTION_COLOR (Win11)
+                // OLED: #1F1F24 window outline so the black window's edge shows (like Discord); Light: soft grey; Dark: system default
+                int border = Theme.Mode == ThemeMode.Oled ? Theme.ColorRef(Theme.Hairline) : Theme.IsLight ? 0x00E0E0E0 : unchecked((int)0xFFFFFFFF);
+                DwmSetWindowAttribute(f.Handle, 34, ref border, 4); // DWMWA_BORDER_COLOR
+                int text = Theme.IsLight ? 0x001B1B1B : unchecked((int)0xFFFFFFFF);
+                DwmSetWindowAttribute(f.Handle, 36, ref text, 4); // DWMWA_TEXT_COLOR: dark on Light, default otherwise
             }
             catch { }
         }
@@ -52,7 +57,7 @@ namespace Fizz
         /// <summary>Windows 10/11 dark scrollbars for a native control (best effort).</summary>
         public static void DarkScrollbars(Control c)
         {
-            try { SetWindowTheme(c.Handle, "DarkMode_Explorer", null); } catch { }
+            try { SetWindowTheme(c.Handle, Theme.IsLight ? "Explorer" : "DarkMode_Explorer", null); } catch { }
         }
 
         /// <summary>Dark, owner-drawn combo box (closed box and dropdown list).</summary>
@@ -80,7 +85,7 @@ namespace Fizz
         bool hover, down;
         public bool Selected;     // nav buttons: accent bar + highlight
         public bool NavStyle;
-        public Color HoverColor = Theme.Hover;
+        public Color HoverColor = Theme.Hover;   // read when the button is made (the settings window is rebuilt on a theme change)
         public string Glyph;          // optional Segoe Fluent Icons glyph (nav buttons, arrow buttons)
         public bool Flat;             // no outline or fill until hovered (the − / + inside number boxes)
         public char Sign;             // '-' or '+': drawn as lines, exactly centred (font glyphs sit off-centre)
@@ -107,7 +112,7 @@ namespace Fizz
             var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
             float rad = Height * 0.28f;
             Color navBg = Parent != null ? Parent.BackColor : Theme.Nav;
-            Color fill = NavStyle ? (Selected ? Color.FromArgb(45, 45, 45) : hover ? Color.FromArgb(36, 36, 36) : navBg)
+            Color fill = NavStyle ? (Selected ? Theme.NavSelected : hover ? Theme.NavHover : navBg)
                                   : (down ? Theme.Selected : hover ? HoverColor : BackColor);
             if (NavStyle) rad = Height * 0.18f;
             if (Flat)
@@ -117,7 +122,8 @@ namespace Fizz
             else
             {
                 Ui.Fill(g, r, fill, rad);
-                if (!NavStyle) Ui.Stroke(g, r, Color.FromArgb(hover ? 70 : 38, 255, 255, 255), rad);
+                if (!NavStyle) Ui.Stroke(g, r, hover ? Theme.EdgeHover : Theme.Edge, rad);
+                else if (Selected && !Theme.Hairline.IsEmpty) Ui.Stroke(g, r, Theme.Hairline, rad);
             }
             if (NavStyle && Selected)
                 Ui.Fill(g, new RectangleF(2, Height * 0.3f, 3, Height * 0.4f), Theme.Accent, 1.5f);
@@ -138,7 +144,7 @@ namespace Fizz
                 float gs = Math.Max(8f, Font.SizeInPoints * (NavStyle ? 1.1f : 1f));
                 if (glyphFont == null || Math.Abs(glyphFont.SizeInPoints - gs) > 0.01f) { if (glyphFont != null) glyphFont.Dispose(); glyphFont = new Font(Theme.IconFont, gs); }
                 var gr = NavStyle ? new Rectangle(textX, 0, (int)(Height * 0.6f), Height) : string.IsNullOrEmpty(Text) ? ClientRectangle : new Rectangle(0, 0, Height, Height);
-                Color gc = !Enabled ? Theme.Dim : NavStyle && Selected ? Theme.Accent : fg;
+                Color gc = !Enabled ? Theme.Dim : NavStyle && Selected ? Theme.AccentText : fg;
                 TextRenderer.DrawText(g, Glyph, glyphFont, gr, gc, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
                 if (NavStyle) textX += (int)(Height * 0.6f) + (int)(Height * 0.2f);
             }
@@ -250,7 +256,7 @@ namespace Fizz
             float pad = Pad, th = Math.Max(4f, Height * 0.16f), cy = Height / 2f;
             float t = max > min ? (val - min) / (float)(max - min) : 0;
             float x = pad + t * (Width - 2 * pad);
-            Ui.Fill(g, new RectangleF(pad, cy - th / 2, Width - 2 * pad, th), Theme.Card, th / 2);
+            Ui.Fill(g, new RectangleF(pad, cy - th / 2, Width - 2 * pad, th), Theme.IsLight ? Theme.Selected : Theme.Card, th / 2);
             Ui.Fill(g, new RectangleF(pad, cy - th / 2, x - pad, th), Theme.Accent, th / 2);
             float r = Height * (hover || drag ? 0.3f : 0.26f);
             using (var b = new SolidBrush(Color.White)) g.FillEllipse(b, x - r, cy - r, r * 2, r * 2);
@@ -348,12 +354,87 @@ namespace Fizz
         }
     }
 
+    /// <summary>Dark | OLED | Light: a segmented picker, same as Minibar's (one rounded track, the chosen part raised).</summary>
+    internal sealed class Segmented : Control
+    {
+        public readonly string[] Items;
+        int index, hover = -1;
+        public event Action<int> Picked;
+
+        public Segmented(params string[] items)
+        {
+            Items = items;
+            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw | ControlStyles.Selectable, true);
+            Cursor = Cursors.Hand;
+            TabStop = true;
+        }
+
+        public int Index
+        {
+            get { return index; }
+            set { value = Math.Max(0, Math.Min(Items.Length - 1, value)); if (index != value) { index = value; Invalidate(); } }
+        }
+
+        int Pad { get { return Math.Max(3, Height / 9); } }
+        Rectangle Cell(int i)
+        {
+            int pad = Pad, w = (Width - pad * 2) / Items.Length;
+            return new Rectangle(pad + i * w, pad, w, Height - pad * 2);
+        }
+        int Hit(Point pt) { for (int i = 0; i < Items.Length; i++) if (Cell(i).Contains(pt)) return i; return -1; }
+        void Pick(int i)
+        {
+            if (i < 0 || i >= Items.Length) return;
+            bool changed = i != index;
+            Index = i;
+            var h = Picked; if (changed && h != null) h(i);
+        }
+
+        protected override void OnMouseMove(MouseEventArgs e) { base.OnMouseMove(e); int h = Hit(e.Location); if (h != hover) { hover = h; Invalidate(); } }
+        protected override void OnMouseLeave(EventArgs e) { base.OnMouseLeave(e); hover = -1; Invalidate(); }
+        protected override void OnMouseUp(MouseEventArgs e) { base.OnMouseUp(e); Focus(); if (e.Button == MouseButtons.Left) Pick(Hit(e.Location)); }
+        protected override bool IsInputKey(Keys k) { return k == Keys.Left || k == Keys.Right || base.IsInputKey(k); }
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+            if (e.KeyCode == Keys.Left) { Pick(index - 1); e.Handled = true; }
+            else if (e.KeyCode == Keys.Right) { Pick(index + 1); e.Handled = true; }
+        }
+        protected override void OnGotFocus(EventArgs e) { base.OnGotFocus(e); Invalidate(); }
+        protected override void OnLostFocus(EventArgs e) { base.OnLostFocus(e); Invalidate(); }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            var g = e.Graphics;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var bg = new SolidBrush(Parent != null ? Parent.BackColor : Theme.Bg)) g.FillRectangle(bg, ClientRectangle);
+            float rad = Math.Min(8, Height * 0.24f), k = Height / 36f;
+            var track = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
+            Ui.Fill(g, track, Theme.IsLight ? Theme.Hover : Theme.Nav, rad);
+            Ui.Stroke(g, track, Focused ? Theme.Sub : Theme.Border, rad);
+            for (int i = 0; i < Items.Length; i++)
+            {
+                var c = Cell(i);
+                bool sel = i == index;
+                if (sel)
+                {
+                    Ui.Fill(g, c, Theme.Card, rad - 2);
+                    if (!Theme.Hairline.IsEmpty) Ui.Stroke(g, new RectangleF(c.X + 0.5f, c.Y + 0.5f, c.Width - 1, c.Height - 1), Theme.Hairline, rad - 2);
+                    Ui.Fill(g, new RectangleF(c.X + c.Width / 2f - 8 * k, c.Bottom - 4 * k, 16 * k, 2.5f * k), Theme.Accent, 1.25f * k);
+                }
+                else if (i == hover) Ui.Fill(g, c, Theme.IsLight ? Theme.Selected : Theme.Hover, rad - 2);
+                TextRenderer.DrawText(g, Items[i], Font, c, sel || i == hover ? Theme.Text : Theme.Sub,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix | TextFormatFlags.NoPadding);
+            }
+        }
+    }
+
     /// <summary>Rounded card panel that hosts inputs/lists (paints its own rounded background).</summary>
     internal class RoundHost : Panel
     {
         public float Radius = 8;
         public Color Fill = Theme.Card;
-        public Color Edge = Color.FromArgb(58, 58, 58);
+        public Color Edge = Theme.HostEdge;
         public RoundHost()
         {
             SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
@@ -398,7 +479,7 @@ namespace Fizz
             using (var bg = new SolidBrush(Parent != null ? Parent.BackColor : Theme.Card)) g.FillRectangle(bg, ClientRectangle);
             if (!Needed) return;
             var t = Thumb();
-            Ui.Fill(g, t, drag ? Theme.Accent : Color.FromArgb(95, 95, 95), t.Width / 2);
+            Ui.Fill(g, t, drag ? Theme.Accent : Theme.Thumb, t.Width / 2);
         }
         void ScrollTo(int y)
         {
@@ -489,7 +570,7 @@ namespace Fizz
             var r = new RectangleF(0.5f, 0.5f, Width - 1, Height - 1);
             float rad = Math.Min(8, Height * 0.3f);
             Ui.Fill(g, r, hover && Enabled ? Theme.Hover : Theme.Card, rad);
-            Ui.Stroke(g, r, Color.FromArgb(hover ? 90 : 58, 255, 255, 255), rad);
+            Ui.Stroke(g, r, Theme.IsLight || Theme.Mode == ThemeMode.Oled ? (hover ? Theme.EdgeHover : Theme.Edge) : Color.FromArgb(hover ? 90 : 58, 255, 255, 255), rad);
             int pad = (int)(Height * 0.35f);
             var tr = new Rectangle(pad, 0, Width - pad * 2 - Height / 2, Height);
             TextRenderer.DrawText(g, Convert.ToString(SelectedItem), Font, tr, Enabled ? Theme.Text : Theme.Dim, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
@@ -516,7 +597,7 @@ namespace Fizz
             box.BackColor = Theme.Card;
             box.ForeColor = Theme.Text;
             box.TextAlign = HorizontalAlignment.Center;
-            Edge = Color.FromArgb(78, 78, 78); // a clearer outline than other cards
+            Edge = Theme.NumEdge; // a clearer outline than other cards
             foreach (var b in new[] { minus, plus }) { b.BackColor = Theme.Card; b.ForeColor = Theme.Text; b.TabStop = false; b.Flat = true; }
             minus.Sign = '-'; plus.Sign = '+';
             minus.Click += (s, e) => Value -= inc;
@@ -581,7 +662,7 @@ namespace Fizz
             base.OnPaint(e);
             // thin dividers between − | value | +
             int bw = (int)(Height * 0.9f) + 1, inset = Math.Max(5, Height / 5);
-            using (var p = new Pen(Color.FromArgb(70, 70, 70)))
+            using (var p = new Pen(Theme.NumDivider))
             {
                 e.Graphics.DrawLine(p, bw, inset, bw, Height - inset - 1);
                 e.Graphics.DrawLine(p, Width - bw - 1, inset, Width - bw - 1, Height - inset - 1);

@@ -180,12 +180,16 @@ namespace Fizz
         TextBox hkToggle, hkLayout, hkPreset;
         Label hkProblem;
         CheckBox startWin, summaryCheck, csvCheck, gameSummary;
+        Segmented themePick;
+        string currentPage = "Stats";
 
         int S96(float v) { return (int)Math.Round(v * k); }
 
         protected override void OnHandleCreated(EventArgs e) { base.OnHandleCreated(e); Ui.DarkTitleBar(this); }
 
-        public SettingsForm(FizzApp app)
+        public SettingsForm(FizzApp app) : this(app, "Stats") { }
+
+        public SettingsForm(FizzApp app, string startPage)
         {
             this.app = app;
             using (var g = CreateGraphics()) k = g.DpiX / 96f;
@@ -204,6 +208,16 @@ namespace Fizz
             body.SetBounds(S96(176), 0, S96(664), S96(524)); body.BackColor = Theme.Bg;
             footer.SetBounds(0, S96(524), S96(840), S96(52)); footer.BackColor = Theme.Nav;
             Controls.AddRange(new Control[] { nav, body, footer });
+            if (!Theme.Hairline.IsEmpty)
+            {
+                // OLED and Light: 1px lines under the title bar, beside the side menu and above the footer, so the parts stay apart
+                foreach (var r in new[] { new Rectangle(0, 0, S96(840), 1), new Rectangle(S96(176) - 1, 0, 1, S96(524)), new Rectangle(0, S96(524), S96(840), 1) })
+                {
+                    var line = new Panel { Bounds = r, BackColor = Theme.Hairline };
+                    Controls.Add(line);
+                    line.BringToFront();
+                }
+            }
 
             var mark = new PictureBox { Image = Theme.LoadIcon(S96(28)).ToBitmap(), SizeMode = PictureBoxSizeMode.Zoom, Bounds = new Rectangle(S96(18), S96(18), S96(28), S96(28)), BackColor = Color.Transparent };
             var logo = new Label { Text = "Fizz", Font = Theme.UiTitle(15f), ForeColor = Theme.Text, AutoSize = true, Location = new Point(S96(52), S96(16)), BackColor = Color.Transparent };
@@ -238,7 +252,7 @@ namespace Fizz
             FormClosed += (s, e) => { tick.Dispose(); if (picker != null && !picker.IsDisposed) picker.Close(); };
 
             RefreshFromApp();
-            ShowPage("Stats");
+            ShowPage(pages.ContainsKey(startPage ?? "") ? startPage : "Stats");
         }
 
         // ---------- small control factories ----------
@@ -326,6 +340,7 @@ namespace Fizz
 
         void ShowPage(string name)
         {
+            currentPage = name;
             foreach (var kv in pages) kv.Value.Visible = kv.Key == name;
             foreach (var b in navButtons)
             {
@@ -384,7 +399,7 @@ namespace Fizz
             Lbl(thrPanel, "Amber", 0, S96(38), Theme.Warn);
             amber = Num(thrPanel, S96(50), S96(34), -1000, 100000, 1, 1, (s, e) => SaveThreshold());
             amber.Width = S96(88);
-            Lbl(thrPanel, "Red", S96(154), S96(38), Color.FromArgb(255, 82, 82));
+            Lbl(thrPanel, "Red", S96(154), S96(38), Theme.Red);
             red = Num(thrPanel, S96(186), S96(34), -1000, 100000, 1, 1, (s, e) => SaveThreshold());
             red.Width = S96(88);
             thrHint = Lbl(thrPanel, "", 0, S96(76), Theme.Dim);
@@ -830,7 +845,7 @@ namespace Fizz
             summaryCheck = Chk(p, "Session summaries (only for games you turn it on for, on the Games page)", x, y, (s, e) => { S.SessionSummary = summaryCheck.Checked; Changed(); });
             y += S96(28);
             csvCheck = Chk(p, "Log stats to a CSV file per game session", x, y, (s, e) => { S.CsvLog = csvCheck.Checked; Changed(); });
-            var openLogs = new LinkLabel { Text = "open logs", AutoSize = true, Location = new Point(csvCheck.Right + S96(8), y + 1), LinkColor = Theme.Accent, ActiveLinkColor = Theme.Text, LinkBehavior = LinkBehavior.HoverUnderline };
+            var openLogs = new LinkLabel { Text = "open logs", AutoSize = true, Location = new Point(csvCheck.Right + S96(8), y + 1), LinkColor = Theme.AccentText, ActiveLinkColor = Theme.Text, LinkBehavior = LinkBehavior.HoverUnderline };
             openLogs.Click += (s, e) => { string d = System.IO.Path.Combine(Log.Dir, "logs"); System.IO.Directory.CreateDirectory(d); Process.Start("explorer.exe", "\"" + d + "\""); };
             p.Controls.Add(openLogs);
 
@@ -849,7 +864,7 @@ namespace Fizz
             folder.Click += (s, e) => Process.Start("explorer.exe", "\"" + Log.Dir + "\"");
             p.Controls.Add(folder);
             // the "hidden" sensor picker: a quiet link, not a big button
-            var pick = new LinkLabel { Text = "sensor picker…", AutoSize = true, Location = new Point(S96(520), y + 6), LinkColor = Theme.Dim, ActiveLinkColor = Theme.Accent, LinkBehavior = LinkBehavior.HoverUnderline };
+            var pick = new LinkLabel { Text = "sensor picker…", AutoSize = true, Location = new Point(S96(520), y + 6), LinkColor = Theme.Dim, ActiveLinkColor = Theme.AccentText, LinkBehavior = LinkBehavior.HoverUnderline };
             pick.Click += (s, e) =>
             {
                 if (picker == null || picker.IsDisposed) picker = new SensorPickerForm(app);
@@ -857,6 +872,15 @@ namespace Fizz
                 picker.Activate();
             };
             p.Controls.Add(pick);
+
+            // how this window and the tray menu look (the overlay keeps its own look, set on the Look page)
+            y += S96(50);
+            Lbl(p, "App theme", x, y + 7, Theme.Text);
+            themePick = new Segmented("Dark", "OLED", "Light") { Bounds = new Rectangle(x2 - S96(40), y, S96(276), S96(34)), Font = Font };
+            themePick.Index = (int)Theme.Mode;
+            themePick.Picked += i => BeginInvoke(new Action(() => app.ThemeChanged((ThemeMode)i, currentPage, Location)));
+            p.Controls.Add(themePick);
+            Lbl(p, "Settings window and tray menu", themePick.Right + S96(12), y + 7, Theme.Dim);
         }
 
         // ================= refresh / status =================

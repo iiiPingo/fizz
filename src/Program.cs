@@ -10,8 +10,8 @@ using System.Threading;
 [assembly: System.Reflection.AssemblyTitle("Fizz")]
 [assembly: System.Reflection.AssemblyProduct("Fizz")]
 [assembly: System.Reflection.AssemblyDescription("Fizz - in-game performance overlay")]
-[assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
-[assembly: System.Reflection.AssemblyFileVersion("1.2.0.0")]
+[assembly: System.Reflection.AssemblyVersion("1.3.0.0")]
+[assembly: System.Reflection.AssemblyFileVersion("1.3.0.0")]
 [assembly: System.Runtime.Versioning.TargetFramework(".NETFramework,Version=v4.8", FrameworkDisplayName = ".NET Framework 4.8")]
 
 namespace Fizz

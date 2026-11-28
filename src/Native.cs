@@ -18,7 +18,25 @@ namespace Fizz
         public const int SW_HIDE = 0;
         public const int SW_SHOWNOACTIVATE = 4;
 
+        public static readonly IntPtr HWND_TOP = IntPtr.Zero;
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
+        public static readonly IntPtr HWND_NOTOPMOST = new IntPtr(-2);
+        public const uint SWP_NOZORDER = 0x0004, SWP_NOSENDCHANGING = 0x0400;
+        public const int WM_FIZZ_FOLLOW = 0x8000 + 0x46; // WM_APP + 0x46
+        [DllImport("dwmapi.dll")] public static extern int DwmFlush();
+        [DllImport("winmm.dll")] public static extern uint timeBeginPeriod(uint ms);
+        [DllImport("winmm.dll")] public static extern uint timeEndPeriod(uint ms);
+        public const uint GW_HWNDPREV = 3;
+        public const int GWL_EXSTYLE = -20, DWMWA_CLOAKED = 14;
+        [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, uint cmd);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] public static extern IntPtr GetWindowLongPtr(IntPtr hWnd, int index);
+        [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out int value, int size);
+        public static bool IsTopmost(IntPtr hWnd) { return (GetWindowLongPtr(hWnd, GWL_EXSTYLE).ToInt64() & WS_EX_TOPMOST) != 0; }
+        public static bool IsCloaked(IntPtr hWnd)
+        {
+            try { int c; return DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out c, 4) == 0 && c != 0; }
+            catch { return false; }
+        }
         public static readonly IntPtr HWND_MESSAGE = new IntPtr(-3);
         public const uint SWP_NOSIZE = 0x0001, SWP_NOMOVE = 0x0002, SWP_NOACTIVATE = 0x0010, SWP_NOOWNERZORDER = 0x0200;
 

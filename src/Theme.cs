@@ -5,22 +5,66 @@ using System.Windows.Forms;
 
 namespace Fizz
 {
-    /// <summary>Same dark palette family as Pour, with Fizz's cherry-pink accent.</summary>
+    internal enum ThemeMode { Dark, Oled, Light }
+
+    /// <summary>
+    /// The settings window and tray menu colours: Dark (default, the same as before), OLED or Light, picked on the
+    /// Advanced page (saved as "Theme" in settings.json). The overlay keeps its own look. Fizz's cherry-pink accent.
+    /// </summary>
     internal static class Theme
     {
-        public static readonly Color Bg = Color.FromArgb(32, 32, 32);
-        public static readonly Color Panel = Color.FromArgb(40, 40, 40);
-        public static readonly Color Card = Color.FromArgb(46, 46, 46);
-        public static readonly Color Hover = Color.FromArgb(58, 58, 58);
-        public static readonly Color Selected = Color.FromArgb(70, 70, 70);
-        public static readonly Color Border = Color.FromArgb(64, 64, 64);
-        public static readonly Color Text = Color.FromArgb(242, 242, 242);
-        public static readonly Color Sub = Color.FromArgb(165, 165, 165);
-        public static readonly Color Dim = Color.FromArgb(115, 115, 115);
+        static Palette p = Palette.Dark;
+        public static Palette P { get { return p; } }
+        public static ThemeMode Mode { get { return p.Mode; } }
+        public static bool IsLight { get { return p.Mode == ThemeMode.Light; } }
+
+        public static Color Bg { get { return p.Bg; } }             // page canvas
+        public static Color Panel { get { return p.Panel; } }       // menus
+        public static Color Card { get { return p.Card; } }         // buttons, inputs, lists
+        public static Color Hover { get { return p.Hover; } }
+        public static Color Selected { get { return p.Selected; } }
+        public static Color Border { get { return p.Border; } }
+        public static Color Text { get { return p.Text; } }
+        public static Color Sub { get { return p.Sub; } }
+        public static Color Dim { get { return p.Dim; } }
+        public static Color Nav { get { return p.Nav; } }           // left side menu and footer
+        public static Color NavSelected { get { return p.NavSelected; } }
+        public static Color NavHover { get { return p.NavHover; } }
+        public static Color Edge { get { return p.Edge; } }         // round button outline
+        public static Color EdgeHover { get { return p.EdgeHover; } }
+        public static Color HostEdge { get { return p.HostEdge; } } // card around lists and text boxes
+        public static Color NumEdge { get { return p.NumEdge; } }   // number box outline (a bit clearer)
+        public static Color NumDivider { get { return p.NumDivider; } }
+        public static Color Thumb { get { return p.Thumb; } }       // list scroll thumb
+        public static Color Warn { get { return p.Warn; } }
+        public static Color Red { get { return p.Red; } }
+        public static Color Hairline { get { return p.Hairline; } } // empty on Dark
+
         public static readonly Color Accent = Color.FromArgb(255, 92, 158);
-        public static readonly Color AccentDark = Color.FromArgb(120, 38, 78);
-        public static readonly Color Warn = Color.FromArgb(255, 184, 0);
-        public static readonly Color Nav = Color.FromArgb(27, 27, 27);
+        public static Color AccentDark { get { return IsLight ? Mix(Accent, Color.White, 0.55f) : Color.FromArgb(120, 38, 78); } }
+        // accent used as text or a thin glyph: darker on Light so it stays readable on white
+        public static Color AccentText { get { return IsLight ? Mix(Accent, Color.Black, 0.3f) : Accent; } }
+
+        public static void SetMode(ThemeMode m) { p = Palette.For(m); }
+
+        public static ThemeMode ParseMode(string s)
+        {
+            switch ((s ?? "").Trim().ToLowerInvariant())
+            {
+                case "oled": return ThemeMode.Oled;
+                case "light": return ThemeMode.Light;
+                default: return ThemeMode.Dark;
+            }
+        }
+
+        public static string ModeName(ThemeMode m) { return m == ThemeMode.Oled ? "OLED" : m == ThemeMode.Light ? "Light" : "Dark"; }
+
+        public static Color Mix(Color a, Color b, float t)
+        {
+            return Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+        }
+
+        public static int ColorRef(Color c) { return c.R | (c.G << 8) | (c.B << 16); }
 
         // the family accent colours (the same swatches every Pingo app offers), Fizz pink first
         public static readonly Color[] Swatches =
@@ -88,6 +132,51 @@ namespace Fizz
             }
             catch { return SystemIcons.Application; }
         }
+    }
+
+    /// <summary>One theme's colours. Dark is exactly Fizz's old palette; OLED and Light match Minibar's.</summary>
+    internal sealed class Palette
+    {
+        public ThemeMode Mode;
+        public Color Bg, Panel, Card, Hover, Selected, Border, Text, Sub, Dim, Nav, NavSelected, NavHover,
+            Edge, EdgeHover, HostEdge, NumEdge, NumDivider, Thumb, Warn, Red, Hairline;
+
+        static Color G(int v) { return Color.FromArgb(v, v, v); }
+        static Color H(int rgb) { return Color.FromArgb(255, (rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255); }
+
+        public static readonly Palette Dark = new Palette
+        {
+            Mode = ThemeMode.Dark,
+            Bg = G(32), Panel = G(40), Card = G(46), Hover = G(58), Selected = G(70), Border = G(64),
+            Text = G(242), Sub = G(165), Dim = G(115), Nav = G(27), NavSelected = G(45), NavHover = G(36),
+            Edge = Color.FromArgb(38, 255, 255, 255), EdgeHover = Color.FromArgb(70, 255, 255, 255),
+            HostEdge = G(58), NumEdge = G(78), NumDivider = G(70), Thumb = G(95),
+            Warn = Color.FromArgb(255, 184, 0), Red = Color.FromArgb(255, 82, 82), Hairline = Color.Empty,
+        };
+
+        // Discord Onyx style: pure black canvas, near-black raised surfaces, #1F1F24 hairlines
+        public static readonly Palette Oled = new Palette
+        {
+            Mode = ThemeMode.Oled,
+            Bg = H(0x000000), Panel = H(0x0D0D10), Card = H(0x131316), Hover = H(0x1A1A1E), Selected = H(0x26262C), Border = H(0x1F1F24),
+            Text = G(242), Sub = G(170), Dim = G(120), Nav = H(0x000000), NavSelected = H(0x131316), NavHover = H(0x0D0D10),
+            Edge = H(0x1F1F24), EdgeHover = H(0x2C2C33),
+            HostEdge = H(0x1F1F24), NumEdge = H(0x2C2C33), NumDivider = H(0x1F1F24), Thumb = H(0x3A3A42),
+            Warn = Color.FromArgb(255, 184, 0), Red = Color.FromArgb(255, 82, 82), Hairline = H(0x1F1F24),
+        };
+
+        // Windows 11 Fluent light: #F3F3F3 canvas, white raised surfaces, #E0E0E0 hairlines, #1B1B1B / #5C5C5C text
+        public static readonly Palette Light = new Palette
+        {
+            Mode = ThemeMode.Light,
+            Bg = H(0xF3F3F3), Panel = H(0xFFFFFF), Card = H(0xFFFFFF), Hover = H(0xF0F0F0), Selected = H(0xE5E5E5), Border = H(0xE0E0E0),
+            Text = H(0x1B1B1B), Sub = H(0x5C5C5C), Dim = H(0x8A8A8A), Nav = H(0xEBEBEB), NavSelected = H(0xFFFFFF), NavHover = H(0xF5F5F5),
+            Edge = H(0xE0E0E0), EdgeHover = H(0xC8C8C8),
+            HostEdge = H(0xE0E0E0), NumEdge = H(0xD0D0D0), NumDivider = H(0xE5E5E5), Thumb = H(0xB0B0B0),
+            Warn = H(0x9D5D00), Red = H(0xC42B1C), Hairline = H(0xE0E0E0),
+        };
+
+        public static Palette For(ThemeMode m) { return m == ThemeMode.Oled ? Oled : m == ThemeMode.Light ? Light : Dark; }
     }
 
     /// <summary>

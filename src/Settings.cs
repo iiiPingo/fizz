@@ -90,6 +90,7 @@ namespace Fizz
         [DataMember(Order = 19)] public bool CsvLog;
         [DataMember(Order = 20)] public string Screen = "Active";     // Active (screen of the window in front) | Main (always the main screen)
         [DataMember(Order = 21)] public bool PinInWindow = true;      // windowed games: true = inside the game window, false = screen corner
+        [DataMember(Name = "Theme", Order = 22)] public string UiTheme = "Dark"; // settings window + tray menu: Dark | OLED | Light (the overlay keeps its own look)
 
         [OnDeserializing]
         void OnDeserializing(StreamingContext c) { ApplyFieldDefaults(); }
@@ -98,6 +99,7 @@ namespace Fizz
         {
             // DataContractSerializer skips constructors; reset field initializers for members missing from older files.
             Version = 1; Mode = "Auto"; Corner = "TopLeft"; Margin = 12; ActivePreset = "Full";
+            UiTheme = "Dark";
             Presets = new List<Preset>(); Thresholds = new List<ThresholdSetting>(); Games = new List<GameRule>();
             NotGames = new List<string>(); CpuTempSensor = new SensorPick(); GpuTempSensor = new SensorPick();
             StartWithWindows = true; SampleMs = 500; HotkeyToggle = "Ctrl+Alt+F"; HotkeyLayout = "Ctrl+Alt+L"; HotkeyPreset = "Ctrl+Alt+P";
@@ -196,6 +198,7 @@ namespace Fizz
             if (Presets == null) Presets = new List<Preset>();
             if (Thresholds == null) Thresholds = new List<ThresholdSetting>();
             if (Games == null) Games = new List<GameRule>();
+            UiTheme = Theme.ModeName(Theme.ParseMode(UiTheme)); // anything unknown is Dark
             if (NotGames == null) NotGames = new List<string>();
             if (CpuTempSensor == null) CpuTempSensor = new SensorPick();
             if (GpuTempSensor == null) GpuTempSensor = new SensorPick();

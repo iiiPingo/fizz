@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 API=/usr/lib/mono/4.8-api
 LIB=lib/lhm096
 mkdir -p out
-python3 tools/make_res.py src/app.manifest src/fizz.ico out/fizz.res 1.2.0.0
+python3 tools/make_res.py src/app.manifest src/fizz.ico out/fizz.res 1.3.0.0
 mcs -target:winexe -platform:x64 -optimize+ -debug- -nostdlib -noconfig -langversion:7.2 \
   -out:out/Fizz.exe -win32res:out/fizz.res -resource:src/fizz.ico,Fizz.fizz.ico -resource:src/fizz-tray.ico,Fizz.fizz-tray.ico \
   -resource:src/fonts/Outfit-Regular.ttf,Fizz.Outfit-Regular.ttf -resource:src/fonts/Outfit-SemiBold.ttf,Fizz.Outfit-SemiBold.ttf \

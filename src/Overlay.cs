@@ -141,7 +141,8 @@ namespace Fizz
         }
 
         /// <param name="anchor">Area to pin the overlay into: the game's client area (windowed) or the monitor.</param>
-        public void Render(OverlayContent c, IntPtr monitor, Native.RECT anchor)
+        /// <param name="glueTo">The game window to sit directly above, or zero for a free always-on-top overlay.</param>
+        public void Render(OverlayContent c, IntPtr monitor, Native.RECT anchor, IntPtr glueTo)
         {
             if (!IsHandleCreated) CreateHandle();
             if (monitor == IntPtr.Zero) monitor = Native.MonitorFromPoint(new Native.POINT(0, 0), Native.MONITOR_DEFAULTTOPRIMARY);
@@ -178,13 +179,72 @@ namespace Fizz
                 visible = true;
                 lastTopmostUtc = DateTime.MinValue;
             }
-            // Borderless games can end up above us; quietly re-assert topmost every couple of seconds.
-            if ((DateTime.UtcNow - lastTopmostUtc).TotalSeconds >= 2)
+            if (glueTo != IntPtr.Zero && !Native.IsTopmost(glueTo)) KeepAbove(glueTo);
+            else if ((DateTime.UtcNow - lastTopmostUtc).TotalSeconds >= 2 || !Native.IsTopmost(Handle))
             {
-                Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0,
-                    Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER);
+                // No game to sit on, or the game is itself always-on-top: only topmost can stay above it.
+                Native.SetWindowPos(Handle, Native.HWND_TOPMOST, 0, 0, 0, 0, ZFlags);
                 lastTopmostUtc = DateTime.UtcNow;
             }
+        }
+
+        const uint ZFlags = Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER;
+
+        /// <summary>
+        /// Puts the overlay directly above the game in the normal window stack, so anything in front of the game
+        /// is also in front of the overlay. Costs two cheap calls when it's already in place.
+        /// </summary>
+        public void KeepAbove(IntPtr game)
+        {
+            if (!visible || game == IntPtr.Zero || Native.IsTopmost(game)) return;
+            // Windows can reorder while another app is being activated, so check the result and retry.
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                IntPtr prev = Native.GetWindow(game, Native.GW_HWNDPREV);
+                bool selfTopmost = Native.IsTopmost(Handle);
+                if (prev == Handle && !selfTopmost) return;
+                bool prevTopmost = prev != IntPtr.Zero && prev != Handle && Native.IsTopmost(prev);
+                if (selfTopmost && (prev == Handle || prev == IntPtr.Zero || prevTopmost))
+                    Native.SetWindowPos(Handle, Native.HWND_NOTOPMOST, 0, 0, 0, 0, ZFlags); // lands right above the game
+                else
+                {
+                    // going straight behind the window above the game, so the overlay never flashes over it
+                    Native.SetWindowPos(Handle, InsertAfter(prev, prevTopmost), 0, 0, 0, 0, ZFlags);
+                    if (Native.IsTopmost(Handle)) Native.SetWindowPos(Handle, Native.HWND_NOTOPMOST, 0, 0, 0, 0, ZFlags);
+                }
+            }
+        }
+
+        /// <summary>Raised on the UI thread when the follower sees the game window move.</summary>
+        public event Action FollowRequested;
+
+        protected override void WndProc(ref Message m)
+        {
+            if (m.Msg == Native.WM_FIZZ_FOLLOW)
+            {
+                var a = FollowRequested;
+                if (a != null) a();
+                return;
+            }
+            base.WndProc(ref m);
+        }
+
+        /// <summary>Moves the already-drawn overlay to a new game position, with no redraw. False if it needs a full Render.</summary>
+        public bool MoveToAnchor(Native.RECT anchor)
+        {
+            if (!visible || !hasLast) return false;
+            var r = PlacedRect(last.Corner, last.Margin, anchor, lastSize, lastDpi > 0 ? lastDpi / 96f : 1f);
+            if (!Native.SetWindowPos(Handle, IntPtr.Zero, r.Left, r.Top, 0, 0,
+                Native.SWP_NOSIZE | Native.SWP_NOZORDER | Native.SWP_NOACTIVATE | Native.SWP_NOOWNERZORDER | Native.SWP_NOSENDCHANGING)) return false;
+            lastAnchor = anchor;
+            return true;
+        }
+
+        /// <summary>Which window to insert the overlay behind so it lands just above the game.</summary>
+        public static IntPtr InsertAfter(IntPtr windowAboveGame, bool thatWindowIsTopmost)
+        {
+            // Inserting behind a topmost window would make the overlay topmost too.
+            return windowAboveGame == IntPtr.Zero || thatWindowIsTopmost ? Native.HWND_TOP : windowAboveGame;
         }
 
         static bool RectEq(Native.RECT a, Native.RECT b)

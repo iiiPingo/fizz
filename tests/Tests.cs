@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.Text;
 
 namespace Fizz.Tests
@@ -36,6 +37,7 @@ namespace Fizz.Tests
             Session();
             Formatting();
             SettingsTests();
+            ThemeTests();
             Hotkeys();
             OverlayStaysPut();
             GameExceptions();
@@ -243,6 +245,50 @@ namespace Fizz.Tests
             Ok(bad == 0, "value keys never hide a text change (" + bad + " clashes)");
         }
 
+        static void ThemeTests()
+        {
+            Ok(Theme.ParseMode("dark") == ThemeMode.Dark && Theme.ParseMode("OLED") == ThemeMode.Oled && Theme.ParseMode(" light ") == ThemeMode.Light, "theme names parse");
+            Ok(Theme.ParseMode(null) == ThemeMode.Dark && Theme.ParseMode("purple") == ThemeMode.Dark, "unknown theme is Dark");
+            foreach (ThemeMode m in Enum.GetValues(typeof(ThemeMode))) Ok(Theme.ParseMode(Theme.ModeName(m)) == m, "theme name round trip " + m);
+
+            var s = FizzSettings.CreateDefault();
+            Ok(s.UiTheme == "Dark", "new settings use Dark");
+            Ok(FizzSettings.FromJson("{\"Mode\":\"Auto\"}").UiTheme == "Dark", "older settings files (no Theme) stay Dark");
+            Ok(FizzSettings.FromJson("{\"Theme\":\"OLED\"}").UiTheme == "OLED", "OLED loads");
+            Ok(FizzSettings.FromJson("{\"Theme\":\"light\"}").UiTheme == "Light", "Light loads (any case)");
+            Ok(FizzSettings.FromJson("{\"Theme\":\"Neon\"}").UiTheme == "Dark", "bad theme repaired to Dark");
+            s.UiTheme = "Light";
+            string json = s.ToJson();
+            Ok(json.Contains("\"Theme\": \"Light\"") || json.Contains("\"Theme\":\"Light\""), "theme saved as \"Theme\"");
+            Ok(FizzSettings.FromJson(json).UiTheme == "Light", "theme survives a save");
+
+            // Dark is exactly the old palette
+            Theme.SetMode(ThemeMode.Dark);
+            Ok(Theme.Bg == Color.FromArgb(32, 32, 32) && Theme.Card == Color.FromArgb(46, 46, 46) && Theme.Nav == Color.FromArgb(27, 27, 27)
+               && Theme.Text == Color.FromArgb(242, 242, 242) && Theme.Sub == Color.FromArgb(165, 165, 165) && Theme.Border == Color.FromArgb(64, 64, 64), "Dark palette unchanged");
+            Ok(Theme.Hairline.IsEmpty && Theme.AccentText == Theme.Accent, "Dark: no hairlines, plain accent");
+            Theme.SetMode(ThemeMode.Oled);
+            Ok(Theme.Bg.ToArgb() == Color.Black.ToArgb() && Theme.Nav.ToArgb() == Color.Black.ToArgb() && Theme.Hairline == Color.FromArgb(0x1F, 0x1F, 0x24), "OLED: pure black, #1F1F24 hairlines");
+            Theme.SetMode(ThemeMode.Light);
+            Ok(Theme.IsLight && Theme.Bg == Color.FromArgb(0xF3, 0xF3, 0xF3) && Theme.Card.ToArgb() == Color.White.ToArgb() && Theme.Text == Color.FromArgb(0x1B, 0x1B, 0x1B), "Light: Windows 11 light");
+            Ok(Lum(Theme.AccentText) < Lum(Theme.Accent), "Light: accent text darker than the accent");
+            foreach (var m in new[] { ThemeMode.Dark, ThemeMode.Oled, ThemeMode.Light })
+            {
+                Theme.SetMode(m);
+                Ok(Contrast(Theme.Text, Theme.Bg) >= 7 && Contrast(Theme.Text, Theme.Card) >= 7, m + ": text readable");
+                Ok(Contrast(Theme.Sub, Theme.Bg) >= 4.5 && Contrast(Theme.Sub, Theme.Card) >= 4.5, m + ": secondary text readable");
+                Ok(Contrast(Theme.Warn, Theme.Bg) >= 3 && Contrast(Theme.Red, Theme.Bg) >= 3, m + ": amber and red readable");
+            }
+            Theme.SetMode(ThemeMode.Dark);
+        }
+
+        static double Lum(Color c)
+        {
+            Func<int, double> ch = v => { double x = v / 255.0; return x <= 0.03928 ? x / 12.92 : Math.Pow((x + 0.055) / 1.055, 2.4); };
+            return 0.2126 * ch(c.R) + 0.7152 * ch(c.G) + 0.0722 * ch(c.B);
+        }
+        static double Contrast(Color a, Color b) { double x = Lum(a), y = Lum(b); return (Math.Max(x, y) + 0.05) / (Math.Min(x, y) + 0.05); }
+
         static void SettingsTests()
         {
             var s = FizzSettings.CreateDefault();
@@ -329,6 +375,16 @@ namespace Fizz.Tests
             Ok(!FizzApp.StaysOnGame(front, false, false, onGame), "app over the overlay's spot: overlay leaves the game");
             Ok(FizzApp.StaysOnGame(front, true, false, onGame), "desktop in front: overlay stays on the game");
             Ok(!FizzApp.StaysOnGame(R(1920, 0, 3840, 1080), false, false, new Native.RECT()), "no game area: don't claim the overlay is on the game");
+
+            // Glue: alt-tab or a window on top must not switch the overlay off or send it to the screen corner
+            Ok(FizzApp.GluedToGame(true, true), "focused game: glued");
+            Ok(FizzApp.GluedToGame(false, true), "unfocused or covered game: still glued");
+            Ok(!FizzApp.GluedToGame(false, false), "minimized game: not glued");
+
+            IntPtr above = new IntPtr(1234);
+            Ok(OverlayWindow.InsertAfter(above, false) == above, "lands right under the window above the game, so right above the game");
+            Ok(OverlayWindow.InsertAfter(above, true) == Native.HWND_TOP, "never inherits always-on-top from a window above the game");
+            Ok(OverlayWindow.InsertAfter(IntPtr.Zero, false) == Native.HWND_TOP, "game at the very top: overlay goes above it");
         }
 
         static void GameExceptions()

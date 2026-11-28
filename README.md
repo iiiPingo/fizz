@@ -20,6 +20,20 @@
 Exclusive fullscreen can't be drawn over by anything that isn't injected, so run games in borderless mode. Note: some anti-cheats (e.g. FACEIT) may block the PawnIO driver.
 
 ## What's new
+**1.3.0**
+- App theme: Dark, OLED or Light, on the Advanced page. Dark is the same as before. OLED is pure black with near-black buttons and thin outlines. Light is the Windows 11 light look.
+- The theme changes the settings window, its title bar and the tray menu right away. The overlay keeps its own look.
+
+**1.2.2**
+- Fixed: the overlay could show above an app covering the game, such as Discord. A running game now keeps the overlay in its place, even while Fizz's settings window is focused.
+
+**1.2.1**
+- The overlay is now glued to your game. It stays on a running game even when the game isn't focused.
+- With two games open, the overlay moves to whichever game you focus, right away.
+- Other windows now cover the overlay normally, and it no longer shuts off, restarts or floats above your apps.
+- Dragging a windowed game is smooth: the overlay moves with the window.
+- Alt-tabbing between games no longer shows a game summary or starts a new CSV log each time.
+
 **1.2.0**
 - Fixed: after you switched away from a windowed game, the overlay could jump back and forth between the game and the screen corner (most noticeable with "Always" on).
 - Games page is easier: **Add open app…** lists the apps you have open, so you pick a game (or an app that isn't a game) instead of typing its exe. The "never a game" list is now a normal list with Add and Remove.
@@ -40,4 +54,4 @@ Exclusive fullscreen can't be drawn over by anything that isn't injected, so run
 - [Outfit](https://github.com/Outfitio/Outfit-Fonts) font (SIL Open Font License 1.1), in `src/fonts`, used for the settings window
 
 ## License
-PolyForm Noncommercial License 1.0.0: free to use, copy and change for non-commercial purposes, not for selling or other commercial use. See `LICENSE`. This covers Fizz's own code; third-party components keep their own licenses.
+MIT for Fizz's own code. Third-party components keep their own licenses.

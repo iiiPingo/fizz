@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 
 namespace Fizz
 {
@@ -24,6 +25,83 @@ namespace Fizz
             Hwnd = o.Hwnd; Pid = o.Pid; Exe = o.Exe; CoversMonitor = o.CoversMonitor; IsShell = o.IsShell; IsOwn = o.IsOwn;
             IsDesktop = o.IsDesktop; IsMinimized = o.IsMinimized; WindowRect = o.WindowRect; ClientRect = o.ClientRect;
             Monitor = o.Monitor; MonitorRect = o.MonitorRect;
+        }
+    }
+
+    /// <summary>
+    /// Watches the game window's position from its own thread. Idle: about 60 cheap reads a second. While the window
+    /// moves: about every millisecond. It only reads and posts a message, so nothing touches the game.
+    /// </summary>
+    internal sealed class WindowFollower
+    {
+        readonly IntPtr notify;
+        readonly AutoResetEvent wake = new AutoResetEvent(false);
+        volatile IntPtr target;
+        volatile bool stop;
+        int posted;
+
+        public WindowFollower(IntPtr notifyWindow)
+        {
+            notify = notifyWindow;
+            new Thread(Loop) { IsBackground = true, Name = "Fizz.Follower", Priority = ThreadPriority.AboveNormal }.Start();
+        }
+
+        public IntPtr Target
+        {
+            set { if (target == value) return; target = value; if (value != IntPtr.Zero) wake.Set(); }
+        }
+
+        /// <summary>Call when the posted message is handled, so the next move can post again.</summary>
+        public void Handled() { Interlocked.Exchange(ref posted, 0); }
+
+        public void Stop() { stop = true; wake.Set(); }
+
+        void Loop()
+        {
+            var last = new Native.RECT();
+            IntPtr lastTarget = IntPtr.Zero;
+            bool fine = false;
+            long lastMove = 0, settle = System.Diagnostics.Stopwatch.Frequency * 2 / 5;
+            while (!stop)
+            {
+                try
+                {
+                    IntPtr h = target;
+                    if (h == IntPtr.Zero)
+                    {
+                        if (fine) { fine = false; Native.timeEndPeriod(1); }
+                        lastTarget = IntPtr.Zero;
+                        wake.WaitOne();
+                        continue;
+                    }
+                    Native.RECT r;
+                    if (Native.GetWindowRect(h, out r))
+                    {
+                        bool same = h == lastTarget && r.Left == last.Left && r.Top == last.Top && r.Right == last.Right && r.Bottom == last.Bottom;
+                        if (!same)
+                        {
+                            bool wasKnown = h == lastTarget;
+                            last = r; lastTarget = h;
+                            if (wasKnown)
+                            {
+                                lastMove = System.Diagnostics.Stopwatch.GetTimestamp();
+                                if (Interlocked.CompareExchange(ref posted, 1, 0) == 0 &&
+                                    !Native.PostMessage(notify, Native.WM_FIZZ_FOLLOW, IntPtr.Zero, IntPtr.Zero)) Handled();
+                            }
+                        }
+                    }
+                    bool moving = System.Diagnostics.Stopwatch.GetTimestamp() - lastMove < settle;
+                    if (moving != fine)
+                    {
+                        // 1 ms timing only during a drag; back to normal as soon as the window settles
+                        fine = moving;
+                        if (fine) Native.timeBeginPeriod(1); else Native.timeEndPeriod(1);
+                    }
+                    Thread.Sleep(fine ? 1 : 15);
+                }
+                catch (Exception ex) { Log.Throttled("follower", "Follower: " + ex.Message, 120); Thread.Sleep(100); }
+            }
+            if (fine) Native.timeEndPeriod(1);
         }
     }
 

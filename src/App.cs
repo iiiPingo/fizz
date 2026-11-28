@@ -118,11 +118,14 @@ namespace Fizz
         public FizzApp(string heartbeatName)
         {
             Settings = FizzSettings.Load();
+            Theme.SetMode(Theme.ParseMode(Settings.UiTheme));
             PresentMon = new PresentMonService(Frames);
             for (int i = 0; i < valueKeys.Length; i++) valueKeys[i] = long.MinValue;
             for (int i = 0; i < Stats.All.Length; i++) { templates[i, 1] = Stats.All[i].Template; templates[i, 0] = StripUnit(Stats.All[i].Template); }
 
             var forceHandle = overlay.Handle; // BeginInvoke target must exist before any background callback
+            follower = new WindowFollower(forceHandle);
+            overlay.FollowRequested += () => { follower.Handled(); Safe("move", MoveWithGame); };
             if (heartbeatName != null)
             {
                 try { hbFile = MemoryMappedFile.OpenExisting(heartbeatName); hbView = hbFile.CreateViewAccessor(0, 16); }
@@ -159,6 +162,7 @@ namespace Fizz
             saveTimer.Tick += (s, e) => { saveTimer.Stop(); Settings.Save(); };
             uiTimer.Tick += (s, e) => Safe("tick", Tick);
             uiTimer.Start();
+            followTimer.Tick += (s, e) => Safe("follow", Follow);
 
             sampler = new Thread(SamplerLoop) { IsBackground = true, Name = "Fizz.Sampler" };
             sampler.Start();
@@ -331,11 +335,35 @@ namespace Fizz
                     Balloon("Settings couldn't open", ex.Message + " (details in fizz.log)", null);
                     return;
                 }
-                settingsForm.FormClosed += (s, e) => { settingsForm = null; Settings.Save(); };
+                var made = settingsForm;
+                settingsForm.FormClosed += (s, e) => { if (settingsForm == made) settingsForm = null; Settings.Save(); };
             }
             settingsForm.Show();
             if (settingsForm.WindowState == FormWindowState.Minimized) settingsForm.WindowState = FormWindowState.Normal;
             settingsForm.Activate();
+        }
+
+        /// <summary>
+        /// A new theme from the settings window: save it, then rebuild that window in the same place on the same page
+        /// (its controls take their colours when they are made). The tray menu paints from Theme, so it just follows.
+        /// </summary>
+        public void ThemeChanged(ThemeMode m, string page, Point where)
+        {
+            Theme.SetMode(m);
+            Settings.UiTheme = Theme.ModeName(m);
+            SaveSoon();
+            var old = settingsForm;
+            if (old == null || old.IsDisposed) return;
+            SettingsForm fresh;
+            try { fresh = new SettingsForm(this, page); }
+            catch (Exception ex) { Log.Error("ThemeChanged", ex); return; }
+            fresh.StartPosition = FormStartPosition.Manual;
+            fresh.Location = where;
+            fresh.FormClosed += (s, e) => { if (settingsForm == fresh) settingsForm = null; Settings.Save(); };
+            settingsForm = fresh;
+            fresh.Show();
+            fresh.Activate();
+            old.Close();
         }
 
         public string LastGameExe { get { return lastGameExe; } }
@@ -373,6 +401,22 @@ namespace Fizz
         // ================= the 4 Hz UI tick =================
 
         GameRule currentRule;
+        readonly System.Windows.Forms.Timer followTimer = new System.Windows.Forms.Timer { Interval = 33 };
+        readonly WindowFollower follower;
+        IntPtr followFg, followMon;
+        bool followGlued;
+        Native.RECT followRect;
+
+        /// <summary>The game window moved: move the overlay with it right now, without a full update.</summary>
+        void MoveWithGame()
+        {
+            if (gamePid == 0 || !followGlued || gameHwnd == IntPtr.Zero || !Native.IsWindow(gameHwnd)) return;
+            var area = GameAnchor(gameHwnd);
+            if (area.Left == followRect.Left && area.Top == followRect.Top && area.Right == followRect.Right && area.Bottom == followRect.Bottom) return;
+            // a different monitor can mean a different scale, which needs a redraw
+            if (Native.MonitorFromWindow(gameHwnd, Native.MONITOR_DEFAULTTONEAREST) != followMon || !overlay.MoveToAnchor(area)) { Tick(); return; }
+            followRect = area;
+        }
 
         void Tick()
         {
@@ -408,7 +452,8 @@ namespace Fizz
             if (gameInFront)
             {
                 if (fg.Pid != gamePid) StartGame(fg.Pid, fg.Exe);
-                gameHwnd = fg.Hwnd;
+                // a small popup from the game (settings, chat) must not pull the overlay off the main window
+                if (gameHwnd == IntPtr.Zero || !Native.IsWindowVisible(gameHwnd) || fullCandidate || winCandidate) gameHwnd = fg.Hwnd;
                 lastGameFrontTicks = now;
             }
             if (gamePid != 0 && (DateTime.UtcNow - lastAliveCheckUtc).TotalSeconds >= 2)
@@ -417,20 +462,13 @@ namespace Fizz
                 if (!ForegroundWatcher.IsAlive(gamePid)) EndGame("exited");
             }
 
-            // Alt-tabbed away: keep the overlay on the game while the game is still visible
-            // and the window you switched to doesn't sit on top of the overlay (e.g. Discord on the other monitor).
-            // Checked against where the overlay sits ON THE GAME, never where it is right now: in "Always" mode
-            // the overlay jumps to the screen corner when this says no, and checking that spot made it say yes
-            // again next tick, so it bounced between the game window and the screen edge 4 times a second.
-            bool overGame = false;
-            if (!gameInFront && gamePid != 0 && gameHwnd != IntPtr.Zero && Native.IsWindow(gameHwnd) && Native.IsWindowVisible(gameHwnd) && !Native.IsIconic(gameHwnd))
-            {
-                var gameArea = GameAnchor(gameHwnd);
-                var onGame = overlay.BoundsPinnedTo(gameArea, Settings.Corner, Settings.Margin);
-                overGame = StaysOnGame(fg.WindowRect, fg.IsDesktop, fg.IsMinimized, onGame);
-                if (overGame) lastGameFrontTicks = now;
-            }
-            bool gameShown = gameInFront || overGame;
+            // Alt-tabbed away: the overlay stays glued to the last focused game for as long as that game is on screen.
+            // It sits right above the game in the window stack, so whatever covers the game covers the overlay too.
+            // Checked against where the overlay sits ON THE GAME, never where it is right now.
+            bool gameOnScreen = gamePid != 0 && gameHwnd != IntPtr.Zero && Native.IsWindow(gameHwnd) && Native.IsWindowVisible(gameHwnd) &&
+                                !Native.IsIconic(gameHwnd) && !Native.IsCloaked(gameHwnd);
+            bool gameShown = GluedToGame(gameInFront, gameOnScreen);
+            if (gameShown) lastGameFrontTicks = now;
 
             // exclusive fullscreen: PresentMon's present mode is exact; Windows' own flag is the no-admin fallback
             bool exclusive = false;
@@ -482,9 +520,16 @@ namespace Fizz
                     anchor = GameAnchor(gameHwnd);
                 }
                 else if (preview && fg.IsOwn && !Settings.MainScreenOnly) mon = Native.MonitorFromWindow(settingsForm.Handle, Native.MONITOR_DEFAULTTONEAREST);
-                overlay.Render(content, mon, anchor);
+                // a running game always keeps the overlay, even while Fizz's own settings window is focused
+                bool glue = gameShown;
+                overlay.Render(content, mon, anchor, glue ? gameHwnd : IntPtr.Zero);
+                followGlued = glue;
+                followRect = glue ? anchor : new Native.RECT();
+                followMon = glue ? mon : IntPtr.Zero;
             }
-            else overlay.HideOverlay();
+            else { overlay.HideOverlay(); followGlued = false; }
+            followFg = fg.Hwnd;
+            follower.Target = followGlued ? gameHwnd : IntPtr.Zero;
 
             if ((DateTime.UtcNow - lastTooltipUtc).TotalSeconds > 2)
             {
@@ -494,6 +539,29 @@ namespace Fizz
                 tray.Text = t.Length > 63 ? t.Substring(0, 63) : t;
             }
             if ((DateTime.UtcNow - lastStatusUtc).TotalSeconds >= 60) { lastStatusUtc = DateTime.UtcNow; WriteStatus(); }
+        }
+
+        /// <summary>
+        /// Runs ~30x/s only while a game is open: no hooks, just reads. Reacts to alt-tab and window moves
+        /// right away instead of waiting for the next 4 Hz tick.
+        /// </summary>
+        void Follow()
+        {
+            if (gamePid == 0) return;
+            if (Native.GetForegroundWindow() != followFg) { Tick(); return; }
+            if (!followGlued || gameHwnd == IntPtr.Zero) return;
+            if (!Native.IsWindowVisible(gameHwnd) || Native.IsIconic(gameHwnd)) { Tick(); return; }
+            MoveWithGame();
+            overlay.KeepAbove(gameHwnd);
+        }
+
+        /// <summary>
+        /// Should the overlay be on the game? Yes when it's focused, and also when it's unfocused or covered,
+        /// as long as its window is on screen. Only another game taking focus moves it (StartGame).
+        /// </summary>
+        public static bool GluedToGame(bool gameInFront, bool gameOnScreen)
+        {
+            return gameInFront || gameOnScreen;
         }
 
         static IntPtr PrimaryMonitor() { return Native.MonitorFromPoint(new Native.POINT(0, 0), Native.MONITOR_DEFAULTTOPRIMARY); }
@@ -631,9 +699,15 @@ namespace Fizz
             gameStartUtc = DateTime.UtcNow;
             Frames.SetTarget(pid);
             Frames.ResetSession(exe);
-            csvFile = Path.Combine(Log.Dir, "logs", SafeName(GameLabel(exe)) + "_" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv");
+            // alt-tabbing back to a game continues its CSV instead of starting a new file every switch
+            if (!csvFiles.TryGetValue(pid, out csvFile))
+                csvFiles[pid] = csvFile = Path.Combine(Log.Dir, "logs", SafeName(GameLabel(exe)) + "_" + DateTime.Now.ToString("yyyyMMdd-HHmmss") + ".csv");
             Log.Info("Game detected: " + exe + " (pid " + pid + ")");
+            followTimer.Start();
+            samplerWake.Set(); // show the new game's numbers now, not at the next sample
         }
+
+        readonly Dictionary<int, string> csvFiles = new Dictionary<int, string>();
 
         static string SafeName(string s)
         {
@@ -644,8 +718,14 @@ namespace Fizz
         void EndGame(string why)
         {
             string exe = gameExe;
+            int endedPid = gamePid;
+            bool stillRunning = why == "switched" && ForegroundWatcher.IsAlive(endedPid);
+            if (!stillRunning) csvFiles.Remove(endedPid);
             gamePid = 0;
             gameHwnd = IntPtr.Zero;
+            followGlued = false;
+            follower.Target = IntPtr.Zero;
+            followTimer.Stop();
             Frames.SetTarget(0);
             csvPath = null;
             var sum = Frames.GetSession();
@@ -653,7 +733,7 @@ namespace Fizz
             Log.Info("Game ended (" + why + "): " + exe + " after " + (int)len.TotalMinutes + " min, " + sum.Frames + " frames");
             var rule = Settings.FindGame(exe);
             bool wantSummary = rule != null && rule.Summary; // opt-in per game (Games page / tray)
-            if (why != "excluded" && Settings.SessionSummary && wantSummary && len.TotalSeconds >= 60 && sum.Frames >= 300)
+            if (why != "excluded" && !stillRunning && Settings.SessionSummary && wantSummary && len.TotalSeconds >= 60 && sum.Frames >= 300)
             {
                 var inv = CultureInfo.InvariantCulture;
                 string length = len.TotalHours >= 1 ? (int)len.TotalHours + "h " + len.Minutes + "m" : (int)Math.Max(1, len.TotalMinutes) + " min";
@@ -718,8 +798,9 @@ namespace Fizz
                             if (want != null)
                             {
                                 Directory.CreateDirectory(Path.GetDirectoryName(want));
+                                bool newFile = !File.Exists(want); // a game you alt-tabbed back to continues its file
                                 csv = new StreamWriter(want, true, new UTF8Encoding(false));
-                                csv.WriteLine("time,fps,low1_fps,frametime_ms,gpu_temp_c,gpu_load_pct,vram_used_mb,cpu_temp_c,cpu_load_pct,ram_used_mb");
+                                if (newFile) csv.WriteLine("time,fps,low1_fps,frametime_ms,gpu_temp_c,gpu_load_pct,vram_used_mb,cpu_temp_c,cpu_load_pct,ram_used_mb");
                             }
                         }
                         if (csv != null && sessionActiveFlag)
@@ -927,6 +1008,8 @@ namespace Fizz
                 stopping = true;
                 samplerWake.Set();
                 uiTimer.Stop();
+                followTimer.Stop();
+                follower.Stop();
                 SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
                 if (settingsForm != null && !settingsForm.IsDisposed) settingsForm.Close();
